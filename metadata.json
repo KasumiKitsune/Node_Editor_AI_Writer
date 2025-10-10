@@ -1,0 +1,5 @@
+{
+  "name": "AI作品节点编辑器",
+  "description": "一个节点编辑器视图的app，用户可以组合36种故事情节，设定人物和背景，并使用AI来创作故事大纲和正文。",
+  "requestFramePermissions": []
+}
