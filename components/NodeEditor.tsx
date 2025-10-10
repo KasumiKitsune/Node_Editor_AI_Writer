@@ -10,6 +10,7 @@ interface NodeEditorProps {
   onEdgesChange: (edges: Edge[]) => void;
   onUpdateNodeData: (nodeId: string, data: any) => void;
   onDeleteNode: (nodeId: string) => void;
+  onToggleNodeCollapse: (nodeId: string) => void;
   onAnalyzeWork: (nodeId: string, content: string) => void;
   isAnalyzing: boolean;
   onExpandSetting: (nodeId: string) => void;
@@ -26,7 +27,7 @@ const getMidpoint = (touches: React.TouchList) => {
     return { x: (t1.clientX + t2.clientX) / 2, y: (t1.clientY + t2.clientY) / 2 };
 }
 
-const NodeEditor: React.FC<NodeEditorProps> = ({ nodes, edges, onNodesChange, onEdgesChange, onUpdateNodeData, onDeleteNode, onAnalyzeWork, isAnalyzing, onExpandSetting, isExpandingSetting }) => {
+const NodeEditor: React.FC<NodeEditorProps> = ({ nodes, edges, onNodesChange, onEdgesChange, onUpdateNodeData, onDeleteNode, onToggleNodeCollapse, onAnalyzeWork, isAnalyzing, onExpandSetting, isExpandingSetting }) => {
   const [draggingNode, setDraggingNode] = useState<{ id: string; offset: { x: number; y: number } } | null>(null);
   const [connecting, setConnecting] = useState<{ sourceId: string; sourceHandleId?: string; targetPos: { x: number; y: number } } | null>(null);
   const [transform, setTransform] = useState({ x: 0, y: 0, scale: 1 });
@@ -243,7 +244,7 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ nodes, edges, onNodesChange, on
 
   const getSourceHandlePosition = (node: Node, el: HTMLElement, handleId?: string) => {
     let yOffset = el.offsetHeight / 2;
-    if (node.type === NodeType.SETTING && (node.data as SettingNodeData).narrativeStructure !== 'single') {
+    if (!node.isCollapsed && node.type === NodeType.SETTING && (node.data as SettingNodeData).narrativeStructure !== 'single') {
         yOffset = handleId === 'source_b' ? (el.offsetHeight * 2/3) : (el.offsetHeight * 1/3);
     }
     return {
@@ -254,7 +255,7 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ nodes, edges, onNodesChange, on
 
   const getTargetHandlePosition = (node: Node, el: HTMLElement, handleId?: string) => {
       let yOffset = el.offsetHeight / 2;
-      if (node.type === NodeType.PLOT) {
+      if (!node.isCollapsed && node.type === NodeType.PLOT) {
           yOffset = handleId === 'style' ? (el.offsetHeight * 2/3) : (el.offsetHeight * 1/3);
       }
       return {
@@ -355,9 +356,9 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ nodes, edges, onNodesChange, on
   return (
     <div
       ref={editorRef}
-      className="absolute inset-0 bg-gray-900 overflow-hidden"
+      className="absolute inset-0 bg-gray-100 dark:bg-gray-900 overflow-hidden"
       style={{
-        backgroundImage: 'radial-gradient(hsla(220, 13%, 40%, 0.5) 1px, transparent 0)',
+        backgroundImage: 'radial-gradient(hsla(220, 13%, 70%, 0.5) 1px, transparent 0)',
         backgroundSize: '20px 20px',
         touchAction: 'none',
       }}
@@ -370,6 +371,7 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ nodes, edges, onNodesChange, on
       onWheel={handleWheel}
       onContextMenu={handleContextMenu}
     >
+      <div className="dark-grid"></div>
       <div className="absolute top-0 left-0 w-full h-full" style={transformStyle}>
         {nodes.map(node => {
             let connectableTargetType: 'style' | 'flow' | null = null;
@@ -389,7 +391,8 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ nodes, edges, onNodesChange, on
                 key={node.id} 
                 node={node} 
                 onUpdateData={onUpdateNodeData} 
-                onDeleteNode={onDeleteNode} 
+                onDeleteNode={onDeleteNode}
+                onToggleNodeCollapse={onToggleNodeCollapse}
                 onAnalyzeWork={onAnalyzeWork}
                 isAnalyzing={isAnalyzing && node.type === 'WORK'}
                 onExpandSetting={onExpandSetting}
@@ -410,14 +413,14 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ nodes, edges, onNodesChange, on
                       <g key={edge.id} className="pointer-events-auto" onMouseEnter={() => setHoveredEdgeId(edge.id)} onMouseLeave={() => setHoveredEdgeId(null)}>
                           <path
                               d={path}
-                              stroke="#64748b"
+                              className="stroke-gray-400 dark:stroke-gray-600"
                               strokeWidth="2"
                               fill="none"
                           />
                           <path d={path} stroke="transparent" strokeWidth="15" fill="none" />
                           {hoveredEdgeId === edge.id && (
                               <g transform={`translate(${midPoint.x}, ${midPoint.y})`} style={{ cursor: 'pointer' }} onClick={() => handleDeleteEdge(edge.id)}>
-                                  <circle r="8" fill="#dc2626" />
+                                  <circle r="8" className="fill-red-500 hover:fill-red-600" />
                               </g>
                           )}
                       </g>
@@ -435,6 +438,14 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ nodes, edges, onNodesChange, on
               )}
           </g>
       </svg>
+      <style>{`
+        .dark .dark-grid {
+          background-image: radial-gradient(hsla(220, 13%, 40%, 0.5) 1px, transparent 0);
+          background-size: 20px 20px;
+          position: absolute;
+          inset: 0;
+        }
+      `}</style>
     </div>
   );
 };

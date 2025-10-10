@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { Node, Edge, NodeType, CharacterNodeData, SettingNodeData, PlotNodeData, StyleNodeData, StructureNodeData, WorkNodeData, KeyValueField, StructureCategory, EnvironmentNodeData } from './types';
 import { generateOutline, generateStory, analyzeWork, expandSetting } from './services/geminiService';
 import { STORY_PLOTS, STORY_STYLES, STORY_STRUCTURES } from './constants';
@@ -28,8 +28,9 @@ const App: React.FC = () => {
   const [edges, setEdges] = useState<Edge[]>([]);
   const [language, setLanguage] = useState<string>('中文');
   const [model, setModel] = useState<string>('gemini-2.5-flash');
-  
-  const [isGenerating, setIsGenerating] = useState<boolean>(false);
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => (localStorage.getItem('theme') as 'light' | 'dark') || 'dark');
+
+  const [generatingTask, setGeneratingTask] = useState<'outline' | 'story' | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
   const [isExpandingSetting, setIsExpandingSetting] = useState<{ [nodeId: string]: boolean }>({});
   const [modalContent, setModalContent] = useState<'outline' | 'story' | null>(null);
@@ -45,6 +46,16 @@ const App: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const storyContentRef = useRef<HTMLDivElement>(null);
 
+  useEffect(() => {
+    const root = window.document.documentElement;
+    if (theme === 'dark') {
+      root.classList.add('dark');
+    } else {
+      root.classList.remove('dark');
+    }
+    localStorage.setItem('theme', theme);
+  }, [theme]);
+
 
   const addNode = useCallback((type: NodeType, data?: any) => {
     const newNode: Node = {
@@ -52,6 +63,7 @@ const App: React.FC = () => {
       type,
       position: { x: Math.random() * 400 + 50, y: Math.random() * 300 + 50 },
       data: {} as any,
+      isCollapsed: false,
     };
 
     switch (type) {
@@ -104,6 +116,10 @@ const App: React.FC = () => {
   const deleteNode = useCallback((nodeId: string) => {
     setNodes(nds => nds.filter(n => n.id !== nodeId));
     setEdges(eds => eds.filter(e => e.source !== nodeId && e.target !== nodeId));
+  }, []);
+  
+  const handleToggleNodeCollapse = useCallback((nodeId: string) => {
+    setNodes(nds => nds.map(n => n.id === nodeId ? { ...n, isCollapsed: !n.isCollapsed } : n));
   }, []);
 
   const handleClearAllNodes = useCallback(() => {
@@ -195,6 +211,7 @@ const App: React.FC = () => {
                 type: NodeType.CHARACTER,
                 position: { x: sourceNode.position.x - 400, y: sourceNode.position.y + index * 180 },
                 data: { title: char.title, fields: charFields },
+                isCollapsed: false,
             };
         });
         createdNodes.push(...characterNodes);
@@ -207,6 +224,7 @@ const App: React.FC = () => {
                 type: NodeType.SETTING,
                 position: { x: sourceNode.position.x, y: sourceNode.position.y - 250 - (index * 200) },
                 data: { title: setting.title, fields: settingFields, narrativeStructure: 'single' },
+                isCollapsed: false,
             };
         });
         createdNodes.push(...settingNodes);
@@ -219,6 +237,7 @@ const App: React.FC = () => {
                 type: NodeType.ENVIRONMENT,
                 position: { x: sourceNode.position.x - 200, y: sourceNode.position.y - 450 - (index * 200) },
                 data: { title: env.title, fields: envFields },
+                isCollapsed: false,
             };
         });
         createdNodes.push(...environmentNodes);
@@ -235,7 +254,8 @@ const App: React.FC = () => {
                     title: libraryStyle?.name || style.title,
                     description: libraryStyle?.description || style.description || '自定义风格',
                     applicationMethod: 'appropriate'
-                }
+                },
+                isCollapsed: false,
             };
             return styleNode;
         });
@@ -269,7 +289,8 @@ const App: React.FC = () => {
                     description: libraryStart?.description || start.description || '',
                     category: StructureCategory.STARTING,
                     userInput: start.userInput || ''
-                }
+                },
+                isCollapsed: false,
             };
             createdNodes.push(startNode);
             structureNodes.push(startNode);
@@ -287,7 +308,8 @@ const App: React.FC = () => {
                     description: libraryEnd?.description || end.description || '',
                     category: StructureCategory.ENDING,
                     userInput: end.userInput || ''
-                }
+                },
+                isCollapsed: false,
             };
             createdNodes.push(endNode);
             structureNodes.push(endNode);
@@ -308,6 +330,7 @@ const App: React.FC = () => {
                     description: libraryPlot?.description || plot.description || '自定义情节',
                     userInput: plot.userInput || '' 
                 },
+                isCollapsed: false,
             };
             yOffset += 180;
             return plotNode;
@@ -391,6 +414,7 @@ const App: React.FC = () => {
                 id: `CHAR_expanded_${Date.now()}_${index}`, type: NodeType.CHARACTER,
                 position: { x: sourceNode.position.x - 400, y: sourceNode.position.y + index * 180 },
                 data: { title: char.title, fields: charFields },
+                isCollapsed: false,
             });
         });
 
@@ -401,6 +425,7 @@ const App: React.FC = () => {
                 id: `ENV_expanded_${Date.now()}_${index}`, type: NodeType.ENVIRONMENT,
                 position: { x: sourceNode.position.x, y: sourceNode.position.y + 250 + (index * 200) },
                 data: { title: env.title, fields: envFields },
+                isCollapsed: false,
             });
         });
 
@@ -417,6 +442,7 @@ const App: React.FC = () => {
                         description: libraryPlot.description,
                         userInput: '' 
                     },
+                    isCollapsed: false,
                 });
              }
         });
@@ -434,7 +460,8 @@ const App: React.FC = () => {
                         title: libraryStyle.name,
                         description: libraryStyle.description,
                         applicationMethod: 'appropriate'
-                    }
+                    },
+                    isCollapsed: false,
                 };
                 createdNodes.push(styleNode);
                 createdEdges.push({
@@ -460,7 +487,8 @@ const App: React.FC = () => {
                         description: libraryStart.description,
                         category: StructureCategory.STARTING,
                         userInput: ''
-                    }
+                    },
+                    isCollapsed: false,
                 });
             }
         }
@@ -477,7 +505,8 @@ const App: React.FC = () => {
                         description: libraryEnd.description,
                         category: StructureCategory.ENDING,
                         userInput: ''
-                    }
+                    },
+                    isCollapsed: false,
                 });
             }
         }
@@ -508,23 +537,29 @@ const App: React.FC = () => {
   };
 
   const handleGenerateOutline = async () => {
-    setIsGenerating(true);
-    const result = await generateOutline(nodes, edges, language, model);
-    setOutline(result);
-    setAssetLibrary(prev => [...prev, { type: 'outline', content: result, title: `大纲 - ${new Date().toLocaleString()}`, timestamp: new Date() }]);
-    setIsGenerating(false);
-    setModalContent('outline');
-    setIsEditingOutline(false); // Default to preview mode after generating
+    setGeneratingTask('outline');
+    try {
+        const result = await generateOutline(nodes, edges, language, model);
+        setOutline(result);
+        setAssetLibrary(prev => [...prev, { type: 'outline', content: result, title: `大纲 - ${new Date().toLocaleString()}`, timestamp: new Date() }]);
+        setModalContent('outline');
+        setIsEditingOutline(false); // Default to preview mode after generating
+    } finally {
+        setGeneratingTask(null);
+    }
   };
 
   const handleGenerateStory = async () => {
-    setIsGenerating(true);
+    setGeneratingTask('story');
     setModalContent(null); // Close outline modal before generating story
-    const result = await generateStory(nodes, edges, outline, language, model);
-    setStory(result);
-    setAssetLibrary(prev => [...prev, { type: 'story', content: result, title: `故事 - ${new Date().toLocaleString()}`, timestamp: new Date() }]);
-    setIsGenerating(false);
-    setModalContent('story');
+    try {
+        const result = await generateStory(nodes, edges, outline, language, model);
+        setStory(result);
+        setAssetLibrary(prev => [...prev, { type: 'story', content: result, title: `故事 - ${new Date().toLocaleString()}`, timestamp: new Date() }]);
+        setModalContent('story');
+    } finally {
+        setGeneratingTask(null);
+    }
   };
 
   const handleCopy = (content: string) => {
@@ -561,7 +596,7 @@ const App: React.FC = () => {
       <main className="relative flex-1 h-full">
         <button 
           onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-          className="md:hidden fixed top-4 left-4 z-40 p-2 bg-gray-800 rounded-md text-white"
+          className="md:hidden fixed top-4 left-4 z-40 p-2 bg-gray-100/80 dark:bg-gray-800/80 backdrop-blur-sm rounded-md text-gray-800 dark:text-white"
         >
           {isSidebarOpen ? <XIcon /> : <MenuIcon />}
         </button>
@@ -574,6 +609,7 @@ const App: React.FC = () => {
             onEdgesChange={setEdges}
             onUpdateNodeData={updateNodeData}
             onDeleteNode={deleteNode}
+            onToggleNodeCollapse={handleToggleNodeCollapse}
             onAnalyzeWork={handleAnalyzeWork}
             isAnalyzing={isAnalyzing}
             onExpandSetting={handleExpandSetting}
@@ -584,17 +620,19 @@ const App: React.FC = () => {
           setLanguage={setLanguage}
           model={model}
           setModel={setModel}
-          isGenerating={isGenerating}
+          generatingTask={generatingTask}
           onClearAllNodes={handleClearAllNodes}
           onImportNodes={triggerImport}
           onExportNodes={handleExportNodes}
+          theme={theme}
+          setTheme={setTheme}
         />
         
         {/* Action Toolbar */}
-        <div className="absolute bottom-4 right-4 bg-gray-800 p-3 rounded-lg shadow-lg z-20 flex items-center gap-4 border border-gray-700">
+        <div className="absolute bottom-4 right-4 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm p-3 rounded-lg shadow-lg z-20 flex items-center gap-4 border border-gray-200 dark:border-gray-700">
             <button
                 onClick={() => setIsAssetModalOpen(true)}
-                className="px-4 py-2 bg-gray-700 text-gray-300 rounded-lg hover:bg-cyan-600 hover:text-white transition-colors flex items-center font-semibold"
+                className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-300 rounded-lg hover:bg-cyan-500 hover:text-white dark:hover:bg-cyan-600 transition-colors flex items-center font-semibold"
                 title="资产库"
             >
                 <LibraryIcon className="h-5 w-5 mr-2" />
@@ -602,10 +640,10 @@ const App: React.FC = () => {
             </button>
             <button
                 onClick={handleGenerateOutline}
-                disabled={isGenerating}
-                className="px-4 py-2 bg-cyan-600 text-white font-semibold rounded-lg hover:bg-cyan-500 transition-colors disabled:bg-gray-600 disabled:cursor-not-allowed flex items-center"
+                disabled={!!generatingTask}
+                className="px-4 py-2 bg-cyan-600 text-white font-semibold rounded-lg hover:bg-cyan-500 transition-colors disabled:bg-gray-400 dark:disabled:bg-gray-600 disabled:cursor-not-allowed flex items-center"
             >
-                {isGenerating ? (
+                {generatingTask === 'outline' ? (
                 <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
@@ -615,10 +653,15 @@ const App: React.FC = () => {
 
             <button
                 onClick={handleGenerateStory}
-                disabled={isGenerating || !outline}
-                className="px-4 py-2 bg-emerald-600 text-white font-semibold rounded-lg hover:bg-emerald-500 transition-colors disabled:bg-gray-600 disabled:cursor-not-allowed"
+                disabled={!!generatingTask || !outline}
+                className="px-4 py-2 bg-emerald-600 text-white font-semibold rounded-lg hover:bg-emerald-500 transition-colors disabled:bg-gray-400 dark:disabled:bg-gray-600 disabled:cursor-not-allowed flex items-center"
             >
-                生成故事
+                {generatingTask === 'story' ? (
+                 <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                ) : '生成故事'}
             </button>
         </div>
 
@@ -634,12 +677,12 @@ const App: React.FC = () => {
       <Modal isOpen={modalContent === 'outline'} onClose={() => setModalContent(null)} title="生成的故事大纲">
         {isEditingOutline ? (
             <textarea
-                className="w-full h-96 bg-gray-900 text-gray-200 p-4 rounded-md border border-gray-600 focus:outline-none focus:ring-2 focus:ring-cyan-500 font-mono"
+                className="w-full h-96 bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-200 p-4 rounded-md border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-cyan-500 font-mono"
                 value={outline}
                 onChange={(e) => setOutline(e.target.value)}
             />
         ) : (
-            <div className="w-full h-96 bg-gray-900 text-gray-200 p-4 rounded-md border border-gray-700 overflow-y-auto">
+            <div className="w-full h-96 bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-200 p-4 rounded-md border border-gray-200 dark:border-gray-700 overflow-y-auto">
                 <MarkdownRenderer content={outline} />
             </div>
         )}
@@ -647,20 +690,20 @@ const App: React.FC = () => {
              <div>
                 <button
                     onClick={() => setIsEditingOutline(prev => !prev)}
-                    className="px-4 py-2 bg-gray-600 text-white font-semibold rounded-lg hover:bg-gray-500 transition-colors mr-2"
+                    className="px-4 py-2 bg-gray-300 dark:bg-gray-600 text-gray-800 dark:text-white font-semibold rounded-lg hover:bg-gray-400 dark:hover:bg-gray-500 transition-colors mr-2"
                 >
                     {isEditingOutline ? '预览' : '编辑'}
                 </button>
                 <button
                     onClick={() => handleCopy(outline)}
-                    className="p-2 bg-gray-600 text-white rounded-lg hover:bg-gray-500 transition-colors mr-2"
+                    className="p-2 bg-gray-300 dark:bg-gray-600 text-gray-800 dark:text-white rounded-lg hover:bg-gray-400 dark:hover:bg-gray-500 transition-colors mr-2"
                     title="复制"
                 >
                     <CopyIcon className="h-5 w-5"/>
                 </button>
                 <button
                     onClick={() => handleDownload(outline, 'story-outline')}
-                    className="p-2 bg-gray-600 text-white rounded-lg hover:bg-gray-500 transition-colors"
+                    className="p-2 bg-gray-300 dark:bg-gray-600 text-gray-800 dark:text-white rounded-lg hover:bg-gray-400 dark:hover:bg-gray-500 transition-colors"
                     title="下载"
                 >
                     <DownloadIcon className="h-5 w-5"/>
@@ -668,10 +711,10 @@ const App: React.FC = () => {
             </div>
             <button 
                 onClick={handleGenerateStory}
-                disabled={isGenerating || !outline}
-                className="px-5 py-2 bg-emerald-600 text-white font-semibold rounded-lg hover:bg-emerald-500 transition-colors disabled:bg-gray-600"
+                disabled={!!generatingTask || !outline}
+                className="px-5 py-2 bg-emerald-600 text-white font-semibold rounded-lg hover:bg-emerald-500 transition-colors disabled:bg-gray-400 dark:disabled:bg-gray-600"
             >
-                 {isGenerating && modalContent !== 'story' ? '生成中...' : '开始创作'}
+                 {generatingTask === 'story' ? '生成中...' : '开始创作'}
             </button>
         </div>
       </Modal>
@@ -679,14 +722,14 @@ const App: React.FC = () => {
       <Modal isOpen={modalContent === 'story'} onClose={() => setModalContent(null)} title="生成的故事">
         <div className="flex w-full max-h-[70vh]">
             {storyHeadings.length > 0 && (
-                <nav className="w-64 flex-shrink-0 pr-4 border-r border-gray-700 overflow-y-auto">
-                    <p className="text-lg font-semibold mb-2 text-cyan-400">目录</p>
+                <nav className="w-64 flex-shrink-0 pr-4 border-r border-gray-200 dark:border-gray-700 overflow-y-auto">
+                    <p className="text-lg font-semibold mb-2 text-cyan-600 dark:text-cyan-400">目录</p>
                     <ul className="space-y-1">
                         {storyHeadings.map(h => (
                             <li key={h.id} style={{ paddingLeft: `${(h.level - 1) * 1}rem`}}>
                                 <button 
                                     onClick={() => handleTocClick(h.id)}
-                                    className="text-left text-gray-300 hover:text-white transition-colors text-sm w-full truncate"
+                                    className="text-left text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors text-sm w-full truncate"
                                     title={h.text}
                                 >
                                     {h.text}
@@ -698,7 +741,7 @@ const App: React.FC = () => {
             )}
             <div 
                 ref={storyContentRef} 
-                className={`bg-gray-900 text-gray-200 rounded-md overflow-y-auto ${storyHeadings.length > 0 ? 'pl-4 flex-grow' : 'w-full'}`}
+                className={`bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-200 rounded-md overflow-y-auto ${storyHeadings.length > 0 ? 'pl-4 flex-grow' : 'w-full'}`}
                 style={{ scrollBehavior: 'smooth' }}
             >
                 <MarkdownRenderer content={story} onHeadingsParse={setStoryHeadings} />
@@ -707,14 +750,14 @@ const App: React.FC = () => {
         <div className="mt-4 flex justify-end items-center space-x-2">
             <button
                 onClick={() => handleCopy(story)}
-                className="p-2 bg-gray-600 text-white rounded-lg hover:bg-gray-500 transition-colors"
+                className="p-2 bg-gray-300 dark:bg-gray-600 text-gray-800 dark:text-white rounded-lg hover:bg-gray-400 dark:hover:bg-gray-500 transition-colors"
                 title="复制"
             >
                 <CopyIcon className="h-5 w-5"/>
             </button>
             <button
                 onClick={() => handleDownload(story, 'story')}
-                className="p-2 bg-gray-600 text-white rounded-lg hover:bg-gray-500 transition-colors"
+                className="p-2 bg-gray-300 dark:bg-gray-600 text-gray-800 dark:text-white rounded-lg hover:bg-gray-400 dark:hover:bg-gray-500 transition-colors"
                 title="下载"
             >
                 <DownloadIcon className="h-5 w-5"/>
@@ -723,16 +766,16 @@ const App: React.FC = () => {
       </Modal>
       
       <Modal isOpen={isAssetModalOpen} onClose={() => setIsAssetModalOpen(false)} title="资产库">
-        <div className="w-full max-h-[70vh] bg-gray-900 text-gray-200 rounded-md overflow-y-auto">
+        <div className="w-full max-h-[70vh] bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-200 rounded-md overflow-y-auto">
             {assetLibrary.length === 0 ? (
-                <p className="text-center text-gray-400 py-8">资产库为空。请先生成大纲或故事。</p>
+                <p className="text-center text-gray-500 dark:text-gray-400 py-8">资产库为空。请先生成大纲或故事。</p>
             ) : (
-                <ul className="divide-y divide-gray-700">
+                <ul className="divide-y divide-gray-200 dark:divide-gray-700">
                     {assetLibrary.slice().reverse().map((asset) => (
-                        <li key={asset.timestamp.toISOString()} className="p-4 flex justify-between items-center hover:bg-gray-800">
+                        <li key={asset.timestamp.toISOString()} className="p-4 flex justify-between items-center hover:bg-gray-200 dark:hover:bg-gray-800 transition-colors">
                             <div>
                                 <p className="font-semibold">{asset.title}</p>
-                                <p className="text-sm text-gray-400">{asset.type === 'outline' ? '大纲' : '故事'}</p>
+                                <p className="text-sm text-gray-500 dark:text-gray-400">{asset.type === 'outline' ? '大纲' : '故事'}</p>
                             </div>
                             <div className="flex items-center space-x-2">
                                 <button
@@ -752,7 +795,7 @@ const App: React.FC = () => {
                                 </button>
                                 <button
                                     onClick={() => handleDownload(asset.content, asset.title)}
-                                    className="p-2 bg-gray-600 text-white rounded-lg hover:bg-gray-500 transition-colors"
+                                    className="p-2 bg-gray-300 dark:bg-gray-600 text-gray-800 dark:text-white rounded-lg hover:bg-gray-400 dark:hover:bg-gray-500 transition-colors"
                                     title="下载"
                                 >
                                     <DownloadIcon className="h-5 w-5"/>

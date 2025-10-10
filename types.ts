@@ -1,4 +1,3 @@
-
 // FIX: Removed a self-referential import of `KeyValueField` that was causing a name conflict with the interface declared within this same file.
 export enum NodeType {
   PLOT = 'PLOT',
@@ -15,6 +14,7 @@ export enum PlotCategory {
   POWER = '权力、野心与越轨',
   SURVIVAL = '生存、苦难与救赎',
   DISCOVERY = '发现与认知',
+  OTHER = '其他',
 }
 
 export enum StyleCategory {
@@ -107,6 +107,7 @@ export interface Node<T = NodeData> {
   type: NodeType;
   position: { x: number; y: number };
   data: T;
+  isCollapsed?: boolean;
 }
 
 export interface Edge {
