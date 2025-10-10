@@ -22,6 +22,7 @@ export enum StyleCategory {
   NARRATIVE_METHOD = '叙事方式',
   PROSE_STYLE = '语言文风',
   NARRATIVE_STANCE = '叙事态度',
+  TONE_MOOD = '基调/氛围',
 }
 
 export enum StructureCategory {
@@ -116,4 +117,24 @@ export interface Edge {
   target: string;
   sourceHandle?: string;
   targetHandle?: string;
+}
+
+export interface Chapter {
+  chapter_number: number;
+  chapter_title: string;
+  key_events: string[];
+  point_of_view?: string;
+  setting?: string;
+}
+
+export interface StorySegment {
+  segment_title: string;
+  chapters?: Chapter[];
+  key_events?: string[];
+  estimated_word_count: number;
+}
+
+export interface StructuredOutline {
+  title: string;
+  segments: StorySegment[];
 }

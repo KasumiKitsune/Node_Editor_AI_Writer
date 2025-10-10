@@ -12,9 +12,9 @@ interface NodeEditorProps {
   onDeleteNode: (nodeId: string) => void;
   onToggleNodeCollapse: (nodeId: string) => void;
   onAnalyzeWork: (nodeId: string, content: string) => void;
-  isAnalyzing: boolean;
   onExpandSetting: (nodeId: string) => void;
-  isExpandingSetting: { [nodeId: string]: boolean };
+  activeProgressTask: string | null;
+  progress: number;
 }
 
 const getDistance = (touches: React.TouchList) => {
@@ -27,7 +27,7 @@ const getMidpoint = (touches: React.TouchList) => {
     return { x: (t1.clientX + t2.clientX) / 2, y: (t1.clientY + t2.clientY) / 2 };
 }
 
-const NodeEditor: React.FC<NodeEditorProps> = ({ nodes, edges, onNodesChange, onEdgesChange, onUpdateNodeData, onDeleteNode, onToggleNodeCollapse, onAnalyzeWork, isAnalyzing, onExpandSetting, isExpandingSetting }) => {
+const NodeEditor: React.FC<NodeEditorProps> = ({ nodes, edges, onNodesChange, onEdgesChange, onUpdateNodeData, onDeleteNode, onToggleNodeCollapse, onAnalyzeWork, onExpandSetting, activeProgressTask, progress }) => {
   const [draggingNode, setDraggingNode] = useState<{ id: string; offset: { x: number; y: number } } | null>(null);
   const [connecting, setConnecting] = useState<{ sourceId: string; sourceHandleId?: string; targetPos: { x: number; y: number } } | null>(null);
   const [transform, setTransform] = useState({ x: 0, y: 0, scale: 1 });
@@ -394,10 +394,10 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ nodes, edges, onNodesChange, on
                 onDeleteNode={onDeleteNode}
                 onToggleNodeCollapse={onToggleNodeCollapse}
                 onAnalyzeWork={onAnalyzeWork}
-                isAnalyzing={isAnalyzing && node.type === 'WORK'}
                 onExpandSetting={onExpandSetting}
-                isExpanding={isExpandingSetting[node.id]}
                 connectableTargetType={connectableTargetType}
+                activeProgressTask={activeProgressTask}
+                progress={progress}
               />
             )
         })}

@@ -63,22 +63,53 @@ export const STORY_STYLES: Style[] = [
   { id: 104, name: '奇幻', category: StyleCategory.GENRE, description: '创造一个包含魔法、神话生物或超自然力量的架空世界，讲述通常围绕善恶斗争或史诗冒险展开。' },
   { id: 105, name: '惊悚/恐怖', category: StyleCategory.GENRE, description: '旨在引发读者强烈的恐惧、焦虑或生理不适。惊悚侧重心理压迫和情节的紧张感，恐怖则更偏向超自然或血腥元素。' },
   { id: 106, name: '历史', category: StyleCategory.GENRE, description: '将虚构的人物和故事放置在真实的历史背景中，追求时代氛围的真实感。' },
+  { id: 107, name: '冒险', category: StyleCategory.GENRE, description: '主角前往未知或危险的境地，经历一系列挑战、发现和成长，强调动作、探索和克服困难的过程。' },
+  { id: 108, name: '喜剧', category: StyleCategory.GENRE, description: '旨在通过情节、对话或人物的滑稽行为引人发笑，通常有一个轻松、愉快的结局。' },
+  { id: 109, name: '武侠', category: StyleCategory.GENRE, description: '植根于中国文化的独特类型，以侠客、江湖、武功和道义为核心，讲述快意恩仇与个人成长。' },
+  { id: 110, name: '反乌托邦', category: StyleCategory.GENRE, description: '描绘一个表面看似有序，实则充满压迫、监控和思想控制的未来社会，探讨自由、人性和权力的主题。' },
+  { id: 111, name: '犯罪/黑色', category: StyleCategory.GENRE, description: '聚焦于犯罪行为、侦破过程和犯罪心理。黑色风格（Noir）则更进一步，通常带有悲观主义、道德模糊和宿命论的色彩。' },
+  { id: 112, name: '成长故事', category: StyleCategory.GENRE, description: '又称“启蒙小说”，追踪主角从青春期到成年的心路历程，重点描绘其身份认同、价值观形成和对世界的认知变化。' },
+  { id: 113, name: '寓言/神话', category: StyleCategory.GENRE, description: '通过象征性的角色和情节来传达深刻的道德、哲学或宗教教训。神话则常涉及神祇、英雄与创世传说。' },
+  { id: 114, name: '生活流', category: StyleCategory.GENRE, description: '弱化戏剧性冲突和强情节，专注于描绘日常生活的琐碎细节、人物的内心感受和缓慢流逝的时间。' },
+
   // 叙事方式 (Narrative Method)
   { id: 201, name: '第一人称叙事', category: StyleCategory.NARRATIVE_METHOD, description: '由故事中的“我”来讲述，读者视野完全等同于该角色，代入感强但信息受限。' },
   { id: 202, name: '第三人称叙事', category: StyleCategory.NARRATIVE_METHOD, description: '由故事外的叙述者以“他/她”来讲述。可分为洞悉一切的全知视角，和仅跟随特定角色感知的限制性视角。' },
   { id: 203, name: '非线性叙事', category: StyleCategory.NARRATIVE_METHOD, description: '打破时间顺序，通过倒叙、插叙、多线索并行等方式组织情节，制造悬念或呈现更复杂的主题。' },
   { id: 204, name: '意识流', category: StyleCategory.NARRATIVE_METHOD, description: '直接呈现角色脑海中连贯或混乱的思绪、记忆和感官印象，模仿人类思维的真实流动状态。' },
   { id: 205, name: '不可靠叙事', category: StyleCategory.NARRATIVE_METHOD, description: '叙述者因自身偏见、精神状态或刻意欺骗，导致其讲述与事实不符，读者需要自行辨别真相。' },
+  { id: 206, name: '第二人称叙事', category: StyleCategory.NARRATIVE_METHOD, description: '以“你”作为主角进行讲述，将读者直接置于故事角色的位置，创造出独特的参与感和沉浸感。' },
+  { id: 207, name: '书信体叙事', category: StyleCategory.NARRATIVE_METHOD, description: '故事通过信件、日记、邮件、新闻报道等文件形式呈现，读者通过拼凑这些碎片化的信息来了解全局。' },
+  { id: 208, name: '多视角叙事', category: StyleCategory.NARRATIVE_METHOD, description: '故事在不同章节或部分切换叙事视角，由多个不同角色轮流讲述，提供更全面、立体的事件图景。' },
+  { id: 209, name: '框架故事', category: StyleCategory.NARRATIVE_METHOD, description: '在一个主故事的框架内，讲述一个或多个嵌入的子故事，形成“故事中的故事”结构。' },
+
   // 语言文风 (Prose Style)
   { id: 301, name: '极简主义', category: StyleCategory.PROSE_STYLE, description: '语言高度简练、克制，省略大量描写和心理活动，用最少的文字传达丰富的信息，留下大量“留白”供读者想象。' },
   { id: 302, name: '诗意/华丽', category: StyleCategory.PROSE_STYLE, description: '语言富有韵律和美感，大量运用比喻、象征等修辞，文笔精致，注重营造氛围和意境。' },
   { id: 303, name: '幽默诙谐', category: StyleCategory.PROSE_STYLE, description: '运用讽刺、夸张、双关等手法，语言风趣机智，旨在引人发笑或进行温和的批判。' },
   { id: 304, name: '平实质朴', category: StyleCategory.PROSE_STYLE, description: '语言直白、清晰，不追求华丽的修饰，力求准确、流畅地传达故事内容。' },
+  { id: 305, name: '口语/通俗', category: StyleCategory.PROSE_STYLE, description: '模仿日常对话，使用大量俚语、俗语和非正式表达，语言生动活泼，贴近生活。' },
+  { id: 306, name: '新闻体', category: StyleCategory.PROSE_STYLE, description: '模仿新闻报道的风格，语言客观、精确、信息密度高，注重事实陈述而非情感渲染。' },
+  { id: 307, name: '哥特式', category: StyleCategory.PROSE_STYLE, description: '营造阴森、神秘、恐怖的氛围，常使用古堡、废墟、超自然等元素，语言上倾向于渲染黑暗、死亡和强烈的情感。' },
+  { id: 308, name: '反讽/讽刺', category: StyleCategory.PROSE_STYLE, description: '语言的字面意思与其真实意图相反或不符，通过这种反差达到嘲讽、批判或引人深思的效果。' },
+  
   // 叙事态度 (Narrative Stance)
   { id: 401, name: '现实主义', category: StyleCategory.NARRATIVE_STANCE, description: '致力于客观、细致地描绘日常生活和社会现实，追求细节的真实性和典型性，仿佛生活本身。' },
   { id: 402, name: '魔幻现实主义', category: StyleCategory.NARRATIVE_STANCE, description: '在极为写实的背景中，自然地融入奇幻或超现实的元素，并将它们当作平常事物来处理，以此探讨更深层的现实。' },
   { id: 403, name: '后现代主义', category: StyleCategory.NARRATIVE_STANCE, description: '对传统叙事权威的解构和反思。常常运用戏仿、拼贴、元小说（小说意识到自身是小说）等手法，质疑和游戏于“真实”与“虚构”的边界。' },
   { id: 404, name: '零度叙事', category: StyleCategory.NARRATIVE_STANCE, description: '一种极端客观、冷静的叙事态度。作者力图消除一切主观情感和价值判断，像镜头一样毫无感情地记录事件，语言平淡、中性，达到一种“无风格”的风格。' },
+  { id: 405, name: '自然主义', category: StyleCategory.NARRATIVE_STANCE, description: '现实主义的延伸，强调环境、遗传和社会条件对人物命运的决定性作用，常带有宿命论和悲观色彩。' },
+  { id: 406, name: '浪漫主义', category: StyleCategory.NARRATIVE_STANCE, description: '强调个人情感、想象力、主观体验和自然的壮丽。人物常常是理想化或英雄式的，反抗社会束缚。' },
+  { id: 407, name: '荒诞主义', category: StyleCategory.NARRATIVE_STANCE, description: '通过展现人物在无意义、不合逻辑的世界中的徒劳挣扎，来揭示人类存在的荒谬和沟通的无效性。' },
+  { id: 408, name: '说教式', category: StyleCategory.NARRATIVE_STANCE, description: '叙事的主要目的在于传达明确的道德、伦理或社会教诲，作者的意图清晰可见。' },
+
+  // 基调/氛围 (Tone & Mood)
+  { id: 501, name: '忧郁/致郁', category: StyleCategory.TONE_MOOD, description: '故事弥漫着悲伤、失落和无力感，情节可能走向悲剧，旨在引发读者深刻的同情和沉思。' },
+  { id: 502, name: '励志/治愈', category: StyleCategory.TONE_MOOD, description: '传递积极、向上的能量，讲述角色克服困难、实现成长的故事，给予读者温暖、希望和慰藉。' },
+  { id: 503, name: '怀旧/感伤', category: StyleCategory.TONE_MOOD, description: '以一种温柔而略带伤感的情绪回望过去，注重对逝去时光、记忆和情感的描绘。' },
+  { id: 504, name: '黑暗/冷硬', category: StyleCategory.TONE_MOOD, description: '风格残酷、现实，道德界限模糊，暴力和绝望是常态。冷硬（Hardboiled）是其在侦探小说中的一种体现。' },
+  { id: 505, name: '轻松/明快', category: StyleCategory.TONE_MOOD, description: '氛围轻松愉快，节奏明快，不追求深刻的冲突或主题，以娱乐和放松读者为主要目的。' },
+  { id: 506, name: '史诗/宏大', category: StyleCategory.TONE_MOOD, description: '格局庞大，时间跨度长，涉及众多角色和重大历史事件，语言庄重，气氛严肃而壮丽。' },
 ];
 
 export const STYLE_CATEGORIES = Object.values(StyleCategory);

@@ -6,7 +6,7 @@ interface ToolbarProps {
   setLanguage: (lang: string) => void;
   model: string;
   setModel: (model: string) => void;
-  generatingTask: 'outline' | 'story' | null;
+  isGenerating: boolean;
   onClearAllNodes: () => void;
   onImportNodes: () => void;
   onExportNodes: () => void;
@@ -19,14 +19,13 @@ const Toolbar: React.FC<ToolbarProps> = ({
   setLanguage,
   model,
   setModel,
-  generatingTask,
+  isGenerating,
   onClearAllNodes,
   onImportNodes,
   onExportNodes,
   theme,
   setTheme
 }) => {
-  const isGenerating = !!generatingTask;
   
   return (
     <div className="absolute top-4 right-4 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm p-3 rounded-lg shadow-lg z-20 flex flex-wrap items-center gap-2 md:gap-4 border border-gray-200 dark:border-gray-700">

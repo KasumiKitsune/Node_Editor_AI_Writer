@@ -2,16 +2,23 @@ import React from 'react';
 import { Node, NodeType, PlotNodeData, CharacterNodeData, SettingNodeData, StyleNodeData, KeyValueField, StructureNodeData, StructureCategory, WorkNodeData, EnvironmentNodeData } from '../types';
 import { PlusIcon, TrashIcon, XIcon, BookOpenIcon, SparklesIcon, ChevronUpIcon, ChevronDownIcon } from './icons';
 
+const ProgressDisplay: React.FC<{ progress: number }> = ({ progress }) => (
+    <div className="relative w-full h-full flex items-center justify-center text-xs">
+        <div className="absolute top-0 left-0 h-full bg-cyan-500/50 rounded-md" style={{ width: `${progress}%` }} />
+        <span className="relative z-10">{`处理中... ${progress}%`}</span>
+    </div>
+);
+
 interface NodeComponentProps {
   node: Node;
   onUpdateData: (nodeId: string, data: any) => void;
   onDeleteNode: (nodeId: string) => void;
   onToggleNodeCollapse: (nodeId: string) => void;
   onAnalyzeWork?: (nodeId: string, content: string) => void;
-  isAnalyzing?: boolean;
   onExpandSetting?: (nodeId: string) => void;
-  isExpanding?: boolean;
   connectableTargetType?: 'style' | 'flow' | null;
+  activeProgressTask?: string | null;
+  progress?: number;
 }
 
 const stopPropagationEvents = {
@@ -114,8 +121,10 @@ const EditableNode: React.FC<{
     headerColor: string, 
     isCollapsed?: boolean,
     onExpand?: () => void,
-    isExpanding?: boolean,
-}> = ({ node, onUpdateData, headerColor, isCollapsed, onExpand, isExpanding }) => {
+    isAnyTaskRunning: boolean,
+    isExpandingThisNode: boolean,
+    progress: number,
+}> = ({ node, onUpdateData, headerColor, isCollapsed, onExpand, isAnyTaskRunning, isExpandingThisNode, progress }) => {
   
   const handleFieldChange = (fieldId: string, keyOrValue: 'key' | 'value', value: string) => {
     const newFields = node.data.fields.map(f =>
@@ -204,18 +213,17 @@ const EditableNode: React.FC<{
                 {node.type === NodeType.SETTING && (
                     <button 
                         onClick={onExpand}
-                        disabled={isExpanding}
+                        disabled={isAnyTaskRunning}
                         className="w-full flex items-center justify-center text-xs p-1 rounded-md bg-purple-600 hover:bg-purple-500 text-white transition-colors disabled:bg-gray-500 disabled:cursor-not-allowed"
                     >
-                        {isExpanding ? (
-                            <svg className="animate-spin mr-1 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                            </svg>
+                        {isExpandingThisNode ? (
+                            <ProgressDisplay progress={progress} />
                         ) : (
-                            <SparklesIcon className="h-4 w-4 mr-1" />
+                            <>
+                                <SparklesIcon className="h-4 w-4 mr-1" />
+                                AI 扩展
+                            </>
                         )}
-                        {isExpanding ? '扩展中' : 'AI 扩展'}
                     </button>
                 )}
             </div>
@@ -225,7 +233,15 @@ const EditableNode: React.FC<{
   );
 };
 
-const WorkNode: React.FC<{ node: Node<WorkNodeData>, onUpdateData: (data: WorkNodeData) => void, onAnalyze: () => void, isAnalyzing?: boolean, isCollapsed?: boolean }> = ({ node, onUpdateData, onAnalyze, isAnalyzing, isCollapsed }) => {
+const WorkNode: React.FC<{ 
+    node: Node<WorkNodeData>, 
+    onUpdateData: (data: WorkNodeData) => void, 
+    onAnalyze: () => void, 
+    isCollapsed?: boolean,
+    isAnyTaskRunning: boolean,
+    isAnalyzingThisNode: boolean,
+    progress: number,
+}> = ({ node, onUpdateData, onAnalyze, isCollapsed, isAnyTaskRunning, isAnalyzingThisNode, progress }) => {
     
     const handleDataChange = (field: keyof WorkNodeData, value: string) => {
         onUpdateData({ ...node.data, [field]: value });
@@ -267,16 +283,10 @@ const WorkNode: React.FC<{ node: Node<WorkNodeData>, onUpdateData: (data: WorkNo
                     {node.data.mode === 'rewrite' && (
                         <button 
                             onClick={onAnalyze} 
-                            disabled={isAnalyzing || !node.data.content}
+                            disabled={isAnyTaskRunning || !node.data.content}
                             className="w-full flex items-center justify-center text-sm p-2 mt-1 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white transition-colors disabled:bg-gray-500 disabled:cursor-not-allowed"
                         >
-                            {isAnalyzing ? (
-                                <svg className="animate-spin mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                </svg>
-                            ) : null}
-                            {isAnalyzing ? '解析中...' : 'AI 解析生成节点'}
+                            {isAnalyzingThisNode ? <ProgressDisplay progress={progress} /> : 'AI 解析生成节点'}
                         </button>
                     )}
                 </div>
@@ -286,23 +296,24 @@ const WorkNode: React.FC<{ node: Node<WorkNodeData>, onUpdateData: (data: WorkNo
 };
 
 
-const NodeComponent: React.FC<NodeComponentProps> = ({ node, onUpdateData, onDeleteNode, onToggleNodeCollapse, onAnalyzeWork, isAnalyzing, onExpandSetting, isExpanding, connectableTargetType }) => {
+const NodeComponent: React.FC<NodeComponentProps> = ({ node, onUpdateData, onDeleteNode, onToggleNodeCollapse, onAnalyzeWork, onExpandSetting, connectableTargetType, activeProgressTask, progress = 0 }) => {
   const renderNodeContent = () => {
+    const isAnyTaskRunning = !!activeProgressTask;
     switch (node.type) {
       case NodeType.PLOT:
         return <PlotNode node={node as Node<PlotNodeData>} onUpdateData={(data) => onUpdateData(node.id, data)} isCollapsed={node.isCollapsed} />;
       case NodeType.CHARACTER:
-        return <EditableNode node={node as Node<CharacterNodeData>} onUpdateData={(data) => onUpdateData(node.id, data)} headerColor="bg-indigo-700" isCollapsed={node.isCollapsed} />;
+        return <EditableNode node={node as Node<CharacterNodeData>} onUpdateData={(data) => onUpdateData(node.id, data)} headerColor="bg-indigo-700" isCollapsed={node.isCollapsed} isAnyTaskRunning={isAnyTaskRunning} isExpandingThisNode={false} progress={0} />;
       case NodeType.SETTING:
-        return <EditableNode node={node as Node<SettingNodeData>} onUpdateData={(data) => onUpdateData(node.id, data)} headerColor="bg-purple-700" onExpand={() => onExpandSetting?.(node.id)} isExpanding={isExpanding} isCollapsed={node.isCollapsed} />;
+        return <EditableNode node={node as Node<SettingNodeData>} onUpdateData={(data) => onUpdateData(node.id, data)} headerColor="bg-purple-700" onExpand={() => onExpandSetting?.(node.id)} isCollapsed={node.isCollapsed} isAnyTaskRunning={isAnyTaskRunning} isExpandingThisNode={activeProgressTask === `expand_${node.id}`} progress={progress} />;
       case NodeType.ENVIRONMENT:
-        return <EditableNode node={node as Node<EnvironmentNodeData>} onUpdateData={(data) => onUpdateData(node.id, data)} headerColor="bg-green-700" isCollapsed={node.isCollapsed} />;
+        return <EditableNode node={node as Node<EnvironmentNodeData>} onUpdateData={(data) => onUpdateData(node.id, data)} headerColor="bg-green-700" isCollapsed={node.isCollapsed} isAnyTaskRunning={isAnyTaskRunning} isExpandingThisNode={false} progress={0} />;
       case NodeType.STYLE:
         return <StyleNode node={node as Node<StyleNodeData>} onUpdateData={(data) => onUpdateData(node.id, data)} isCollapsed={node.isCollapsed} />;
       case NodeType.STRUCTURE:
         return <StructureNode node={node as Node<StructureNodeData>} onUpdateData={(data) => onUpdateData(node.id, data)} isCollapsed={node.isCollapsed} />;
       case NodeType.WORK:
-        return <WorkNode node={node as Node<WorkNodeData>} onUpdateData={(data) => onUpdateData(node.id, data)} onAnalyze={() => onAnalyzeWork?.(node.id, (node.data as WorkNodeData).content)} isAnalyzing={isAnalyzing} isCollapsed={node.isCollapsed} />;
+        return <WorkNode node={node as Node<WorkNodeData>} onUpdateData={(data) => onUpdateData(node.id, data)} onAnalyze={() => onAnalyzeWork?.(node.id, (node.data as WorkNodeData).content)} isCollapsed={node.isCollapsed} isAnyTaskRunning={isAnyTaskRunning} isAnalyzingThisNode={activeProgressTask === `analyze_${node.id}`} progress={progress} />;
       default:
         return <div>未知节点</div>;
     }

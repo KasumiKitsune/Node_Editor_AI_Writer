@@ -1,17 +1,21 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { Node, Edge, NodeType, CharacterNodeData, SettingNodeData, PlotNodeData, StyleNodeData, StructureNodeData, WorkNodeData, KeyValueField, StructureCategory, EnvironmentNodeData } from './types';
-import { generateOutline, generateStory, analyzeWork, expandSetting } from './services/geminiService';
+import { Node, Edge, NodeType, CharacterNodeData, SettingNodeData, PlotNodeData, StyleNodeData, StructureNodeData, WorkNodeData, KeyValueField, StructureCategory, EnvironmentNodeData, StructuredOutline } from './types';
+import { generateOutline, generateStoryChapter, generateShortStory, analyzeWork, expandSetting } from './services/geminiService';
 import { STORY_PLOTS, STORY_STYLES, STORY_STRUCTURES } from './constants';
+import { generalExample, expansionExample, rewriteExample } from './exampleData';
 import Sidebar from './components/Sidebar';
 import NodeEditor from './components/NodeEditor';
 import Toolbar from './components/Toolbar';
 import Modal from './components/Modal';
+import AlertModal from './components/AlertModal';
+import ConfirmModal from './components/ConfirmModal';
 import MarkdownRenderer from './components/MarkdownRenderer';
-import { CopyIcon, DownloadIcon, MenuIcon, XIcon, LibraryIcon } from './components/icons';
+import { CopyIcon, DownloadIcon, MenuIcon, XIcon, LibraryIcon, QuestionMarkCircleIcon } from './components/icons';
+import HelpModal, { ExampleName } from './components/HelpModal';
 
 interface Asset {
     type: 'outline' | 'story';
-    content: string;
+    content: string | StructuredOutline;
     title: string;
     timestamp: Date;
 }
@@ -29,22 +33,109 @@ const App: React.FC = () => {
   const [language, setLanguage] = useState<string>('中文');
   const [model, setModel] = useState<string>('gemini-2.5-flash');
   const [theme, setTheme] = useState<'light' | 'dark'>(() => (localStorage.getItem('theme') as 'light' | 'dark') || 'dark');
+  const [targetWordCount, setTargetWordCount] = useState<string>('');
 
-  const [generatingTask, setGeneratingTask] = useState<'outline' | 'story' | null>(null);
-  const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
-  const [isExpandingSetting, setIsExpandingSetting] = useState<{ [nodeId: string]: boolean }>({});
+  const [progress, setProgress] = useState(0);
+  const [progressMessage, setProgressMessage] = useState('');
+  const [activeProgressTask, setActiveProgressTask] = useState<string | null>(null);
+
   const [modalContent, setModalContent] = useState<'outline' | 'story' | null>(null);
-  const [outline, setOutline] = useState<string>('');
+  const [outline, setOutline] = useState<StructuredOutline | null>(null);
   const [story, setStory] = useState<string>('');
-  const [isEditingOutline, setIsEditingOutline] = useState(true);
   const [storyHeadings, setStoryHeadings] = useState<Heading[]>([]);
 
   const [assetLibrary, setAssetLibrary] = useState<Asset[]>([]);
   const [isAssetModalOpen, setIsAssetModalOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
+  
+  const [alertModal, setAlertModal] = useState({ isOpen: false, title: '', message: '' });
+  const [confirmModal, setConfirmModal] = useState({ isOpen: false, title: '', message: '', onConfirm: () => {} });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const storyContentRef = useRef<HTMLDivElement>(null);
+  const progressIntervalRef = useRef<number | null>(null);
+  const startTimeRef = useRef<number>(0);
+  const progressRef = useRef<number>(0);
+
+  const showAlert = (title: string, message: string) => {
+    setAlertModal({ isOpen: true, title, message });
+  };
+
+  const showConfirm = (title: string, message: string, onConfirm: () => void) => {
+    setConfirmModal({ isOpen: true, title, message, onConfirm });
+  };
+
+  const closeAlert = () => setAlertModal({ ...alertModal, isOpen: false });
+  const closeConfirm = () => setConfirmModal({ ...confirmModal, isOpen: false });
+
+  const handleConfirm = () => {
+    confirmModal.onConfirm();
+    closeConfirm();
+  };
+
+
+  const updateProgress = useCallback(() => {
+    const elapsed = (Date.now() - startTimeRef.current) / 1000; // in seconds
+    let currentProgress = 0;
+    if (elapsed < 60) {
+      // Non-linear progress from 0 to 80 in the first 60 seconds (cubic ease-out)
+      currentProgress = 80 * (1 - Math.pow(1 - elapsed / 60, 3));
+    } else if (elapsed < 120) {
+      // Non-linear progress from 80 to 95 in the next 60 seconds
+      currentProgress = 80 + 15 * (1 - Math.pow(1 - (elapsed - 60) / 60, 3));
+    } else {
+      // Hold at 95 after 2 minutes
+      currentProgress = 95;
+    }
+    const finalProgress = Math.min(95, Math.floor(currentProgress));
+    setProgress(finalProgress);
+    progressRef.current = finalProgress;
+  }, []);
+
+  const startProgressIndicator = useCallback((taskIdentifier: string) => {
+    if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
+    setActiveProgressTask(taskIdentifier);
+    setProgress(0);
+    setProgressMessage('正在初始化...');
+    progressRef.current = 0;
+    startTimeRef.current = Date.now();
+    progressIntervalRef.current = window.setInterval(updateProgress, 200);
+  }, [updateProgress]);
+
+  const stopProgressIndicator = useCallback((onComplete: () => void) => {
+    if (progressIntervalRef.current) {
+        clearInterval(progressIntervalRef.current);
+        progressIntervalRef.current = null;
+    }
+    
+    const startProgress = progressRef.current;
+    const duration = 1000; // 1 second
+    const startTime = Date.now();
+
+    const animationInterval = window.setInterval(() => {
+        const elapsed = Date.now() - startTime;
+        if (elapsed >= duration) {
+            clearInterval(animationInterval);
+            progressIntervalRef.current = null;
+            setProgress(100);
+            progressRef.current = 100;
+            setTimeout(() => {
+                onComplete();
+                setActiveProgressTask(null);
+                setProgress(0); 
+                setProgressMessage('');
+                progressRef.current = 0;
+            }, 500); // Show 100% for a moment before disappearing.
+        } else {
+            // Linear interpolation for smooth animation to 100%
+            const newProgress = Math.round(startProgress + (100 - startProgress) * (elapsed / duration));
+            setProgress(newProgress);
+            progressRef.current = newProgress;
+        }
+    }, 16); // ~60fps
+    progressIntervalRef.current = animationInterval;
+  }, []);
 
   useEffect(() => {
     const root = window.document.documentElement;
@@ -99,7 +190,7 @@ const App: React.FC = () => {
       case NodeType.WORK:
         // Only allow one work node at a time
         if (nodes.some(n => n.type === NodeType.WORK)) {
-            alert("目前只支持添加一个作品节点。");
+            showAlert("操作受限", "目前只支持添加一个作品节点。");
             return;
         }
         newNode.data = { title: '导入作品', content: '', mode: 'rewrite' } as WorkNodeData;
@@ -123,15 +214,19 @@ const App: React.FC = () => {
   }, []);
 
   const handleClearAllNodes = useCallback(() => {
-    if (window.confirm('您确定要清除画布上的所有节点和连接吗？此操作无法撤销。')) {
-        setNodes([]);
-        setEdges([]);
-    }
+    showConfirm(
+        '确认清除',
+        '您确定要清除画布上的所有节点和连接吗？此操作无法撤销。',
+        () => {
+            setNodes([]);
+            setEdges([]);
+        }
+    );
   }, []);
   
   const handleExportNodes = useCallback(() => {
     if (nodes.length === 0 && edges.length === 0) {
-        alert("画布上没有可导出的内容。");
+        showAlert("导出失败", "画布上没有可导出的内容。");
         return;
     }
     const dataToExport = { nodes, edges };
@@ -163,16 +258,23 @@ const App: React.FC = () => {
           throw new Error("文件格式无效。");
         }
         
+        const importAction = () => {
+            setNodes(data.nodes);
+            setEdges(data.edges);
+        };
+        
         if (nodes.length > 0 || edges.length > 0) {
-            if (!window.confirm('导入新节点将覆盖当前画布，确定要继续吗?')) {
-                return; 
-            }
+            showConfirm(
+                '确认导入',
+                '导入新节点将覆盖当前画布，确定要继续吗?',
+                importAction
+            );
+        } else {
+            importAction();
         }
 
-        setNodes(data.nodes);
-        setEdges(data.edges);
       } catch (error) {
-        alert(`导入失败: ${error instanceof Error ? error.message : '未知错误'}`);
+        showAlert("导入失败", error instanceof Error ? error.message : '未知错误');
       } finally {
         if (inputElement) {
           inputElement.value = '';
@@ -180,7 +282,7 @@ const App: React.FC = () => {
       }
     };
     reader.onerror = () => {
-      alert('读取文件时出错。');
+      showAlert("读取失败", '读取文件时出错。');
       if (inputElement) {
         inputElement.value = '';
       }
@@ -192,11 +294,46 @@ const App: React.FC = () => {
     fileInputRef.current?.click();
   }, []);
 
+  const handleLoadExample = useCallback((exampleName: ExampleName) => {
+    const loadAction = () => {
+        let exampleData: { nodes: Node[], edges: Edge[] };
+
+        switch (exampleName) {
+            case 'general':
+                exampleData = generalExample;
+                break;
+            case 'expand':
+                exampleData = expansionExample;
+                break;
+            case 'rewrite':
+                exampleData = rewriteExample;
+                break;
+            default:
+                return;
+        }
+        
+        // Use JSON stringify/parse to create deep copies to prevent mutation of original example data
+        setNodes(JSON.parse(JSON.stringify(exampleData.nodes)));
+        setEdges(JSON.parse(JSON.stringify(exampleData.edges)));
+        setIsHelpModalOpen(false);
+    };
+
+    if (nodes.length > 0 || edges.length > 0) {
+        showConfirm(
+            '加载示例',
+            '加载示例将会覆盖当前画布上的所有内容，您确定要继续吗？',
+            loadAction
+        );
+    } else {
+        loadAction();
+    }
+  }, [nodes, edges]);
+
 
   const handleAnalyzeWork = async (nodeId: string, content: string) => {
-    setIsAnalyzing(true);
+    startProgressIndicator(`analyze_${nodeId}`);
     try {
-        const result = await analyzeWork(content, model);
+        const result = await analyzeWork(content, nodes, model);
         const sourceNode = nodes.find(n => n.id === nodeId);
         if (!sourceNode) return;
 
@@ -385,24 +522,29 @@ const App: React.FC = () => {
             });
         }
         
-        setNodes(prev => [...prev, ...createdNodes]);
-        setEdges(prev => [...prev, ...createdEdges]);
+        stopProgressIndicator(() => {
+            setNodes(prev => [...prev, ...createdNodes]);
+            setEdges(prev => [...prev, ...createdEdges]);
+        });
 
     } catch (error) {
-        console.error(error);
-        alert(error instanceof Error ? error.message : '发生未知错误');
-    } finally {
-        setIsAnalyzing(false);
+        stopProgressIndicator(() => {
+            console.error(error);
+            showAlert("解析失败", error instanceof Error ? error.message : '发生未知错误');
+        });
     }
   };
 
   const handleExpandSetting = async (nodeId: string) => {
-    setIsExpandingSetting(prev => ({ ...prev, [nodeId]: true }));
+    startProgressIndicator(`expand_${nodeId}`);
     try {
         const sourceNode = nodes.find(n => n.id === nodeId) as Node<SettingNodeData>;
-        if (!sourceNode) return;
+        if (!sourceNode) {
+            stopProgressIndicator(() => {});
+            return;
+        };
         
-        const result = await expandSetting(sourceNode.data, model);
+        const result = await expandSetting(sourceNode.data, nodes, model);
         
         const createdNodes: Node[] = [];
         const createdEdges: Edge[] = [];
@@ -512,7 +654,7 @@ const App: React.FC = () => {
         }
 
         // Create Connections
-        const allPossibleNodes = [sourceNode, ...createdNodes];
+        const allPossibleNodes = [...nodes, ...createdNodes];
         (result.connections || []).forEach((conn: {sourceTitle: string, targetTitle: string}) => {
             const source = allPossibleNodes.find(n => (n.data as any).title === conn.sourceTitle);
             const target = allPossibleNodes.find(n => (n.data as any).title === conn.targetTitle);
@@ -525,49 +667,133 @@ const App: React.FC = () => {
             }
         });
 
-        setNodes(prev => [...prev, ...createdNodes]);
-        setEdges(prev => [...prev, ...createdEdges]);
-
+        stopProgressIndicator(() => {
+            setNodes(prev => [...prev, ...createdNodes]);
+            setEdges(prev => [...prev, ...createdEdges]);
+        });
     } catch (error) {
-        console.error(error);
-        alert(error instanceof Error ? error.message : '发生未知错误');
-    } finally {
-        setIsExpandingSetting(prev => ({ ...prev, [nodeId]: false }));
+        stopProgressIndicator(() => {
+            console.error(error);
+            showAlert("扩展失败", error instanceof Error ? error.message : '发生未知错误');
+        });
     }
   };
 
   const handleGenerateOutline = async () => {
-    setGeneratingTask('outline');
+    startProgressIndicator('outline');
     try {
-        const result = await generateOutline(nodes, edges, language, model);
-        setOutline(result);
-        setAssetLibrary(prev => [...prev, { type: 'outline', content: result, title: `大纲 - ${new Date().toLocaleString()}`, timestamp: new Date() }]);
-        setModalContent('outline');
-        setIsEditingOutline(false); // Default to preview mode after generating
-    } finally {
-        setGeneratingTask(null);
+        const wordCount = targetWordCount ? parseInt(targetWordCount, 10) : undefined;
+        if (wordCount && isNaN(wordCount)) {
+            showAlert("输入无效", "目标字数必须是一个数字。");
+            stopProgressIndicator(() => {});
+            return;
+        }
+        const result = await generateOutline(nodes, edges, language, model, wordCount);
+        stopProgressIndicator(() => {
+            setOutline(result);
+            setAssetLibrary(prev => [...prev, { type: 'outline', content: result, title: `大纲: ${result.title}`, timestamp: new Date() }]);
+            setModalContent('outline');
+        });
+    } catch (err) {
+        stopProgressIndicator(() => {
+            showAlert("生成大纲失败", `${err instanceof Error ? err.message : '未知错误'}`);
+        });
     }
   };
 
   const handleGenerateStory = async () => {
-    setGeneratingTask('story');
-    setModalContent(null); // Close outline modal before generating story
-    try {
-        const result = await generateStory(nodes, edges, outline, language, model);
-        setStory(result);
-        setAssetLibrary(prev => [...prev, { type: 'story', content: result, title: `故事 - ${new Date().toLocaleString()}`, timestamp: new Date() }]);
-        setModalContent('story');
-    } finally {
-        setGeneratingTask(null);
+    if (!outline || !outline.segments || outline.segments.length === 0) {
+        showAlert("无法生成", "请先生成一个有效的故事大纲。");
+        return;
+    }
+
+    setModalContent(null); // Close outline modal
+    
+    const isShortForm = outline.segments.length > 0 && outline.segments[0].key_events && !outline.segments[0].chapters;
+
+    if (isShortForm) {
+        // --- Short Story Generation ---
+        startProgressIndicator('story');
+        setProgressMessage('正在创作短篇故事...');
+        try {
+            const finalStory = await generateShortStory(nodes, edges, outline, language, model);
+            stopProgressIndicator(() => {
+                setStory(finalStory);
+                setAssetLibrary(prev => [...prev, { type: 'story', content: finalStory, title: `故事: ${outline.title}`, timestamp: new Date() }]);
+                setModalContent('story');
+            });
+        } catch (err) {
+            stopProgressIndicator(() => {
+                showAlert("故事创作失败", `${err instanceof Error ? err.message : '未知错误'}`);
+            });
+        }
+    } else {
+        // --- Long Story (Chapter-based) Generation ---
+        setActiveProgressTask('story');
+        setProgress(0);
+        setProgressMessage('正在准备创作...');
+
+        let accumulatedStory = "";
+        const storyParts: string[] = [];
+        const totalChapters = outline.segments.reduce((acc, s) => acc + (s.chapters?.length || 0), 0);
+        let chaptersDone = 0;
+
+        try {
+            for (let i = 0; i < outline.segments.length; i++) {
+                const segment = outline.segments[i];
+                if (!segment.chapters) continue;
+
+                for (let j = 0; j < segment.chapters.length; j++) {
+                    chaptersDone++;
+                    const progressPercentage = Math.floor(((chaptersDone -1) / totalChapters) * 100);
+                    setProgress(progressPercentage);
+                    setProgressMessage(`正在创作第 ${chaptersDone} / ${totalChapters} 章...`);
+
+                    const newChapterText = await generateStoryChapter(
+                        nodes,
+                        edges,
+                        outline,
+                        accumulatedStory,
+                        i,
+                        j,
+                        language,
+                        model
+                    );
+                    
+                    storyParts.push(newChapterText);
+                    accumulatedStory += (accumulatedStory ? "\n\n" : "") + newChapterText;
+                }
+            }
+
+            setProgress(100);
+            setProgressMessage('创作完成！');
+            const finalStory = storyParts.join('\n\n');
+            setStory(finalStory);
+            setAssetLibrary(prev => [...prev, { type: 'story', content: finalStory, title: `故事: ${outline.title}`, timestamp: new Date() }]);
+            
+            setTimeout(() => {
+                setModalContent('story');
+                setActiveProgressTask(null);
+                setProgress(0);
+                setProgressMessage('');
+            }, 500);
+
+        } catch (err) {
+            showAlert("故事创作失败", `在创作第 ${chaptersDone} 章时出错: ${err instanceof Error ? err.message : '未知错误'}`);
+            setActiveProgressTask(null);
+            setProgress(0);
+            setProgressMessage('');
+        }
     }
   };
 
+
   const handleCopy = (content: string) => {
     navigator.clipboard.writeText(content).then(() => {
-        alert('已复制到剪贴板！');
+        showAlert('复制成功', '已复制到剪贴板！');
     }, (err) => {
         console.error('无法复制文本: ', err);
-        alert('复制失败！');
+        showAlert('复制失败', '无法将内容复制到剪贴板。');
     });
   };
 
@@ -590,6 +816,8 @@ const App: React.FC = () => {
     });
   };
 
+  const isAnyTaskRunning = !!activeProgressTask;
+
   return (
     <div className="w-screen h-screen font-sans flex overflow-hidden">
       <Sidebar onAddNode={addNode} isOpen={isSidebarOpen} />
@@ -611,16 +839,16 @@ const App: React.FC = () => {
             onDeleteNode={deleteNode}
             onToggleNodeCollapse={handleToggleNodeCollapse}
             onAnalyzeWork={handleAnalyzeWork}
-            isAnalyzing={isAnalyzing}
             onExpandSetting={handleExpandSetting}
-            isExpandingSetting={isExpandingSetting}
+            activeProgressTask={activeProgressTask}
+            progress={progress}
         />
         <Toolbar
           language={language}
           setLanguage={setLanguage}
           model={model}
           setModel={setModel}
-          generatingTask={generatingTask}
+          isGenerating={isAnyTaskRunning}
           onClearAllNodes={handleClearAllNodes}
           onImportNodes={triggerImport}
           onExportNodes={handleExportNodes}
@@ -628,40 +856,65 @@ const App: React.FC = () => {
           setTheme={setTheme}
         />
         
+        {/* Progress Card */}
+        {isAnyTaskRunning && (activeProgressTask === 'outline' || activeProgressTask === 'story') && (
+            <div className="absolute bottom-24 right-4 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm p-4 rounded-lg shadow-lg z-20 w-72 border border-gray-200 dark:border-gray-700 animate-fade-in-up">
+                <h4 className="font-semibold text-gray-800 dark:text-gray-200">{activeProgressTask === 'outline' ? '正在生成大纲...' : '正在创作故事...'}</h4>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mb-2 h-4">{progressMessage || '正在构思中，请稍候...'}</p>
+                <div className="w-full bg-gray-200 rounded-full h-2.5 dark:bg-gray-700">
+                    <div className="bg-cyan-600 h-2.5 rounded-full" style={{ width: `${progress}%`, transition: 'width 0.3s ease-in-out' }}></div>
+                </div>
+                <p className="text-right text-sm font-semibold mt-1 text-gray-600 dark:text-gray-300">{progress}%</p>
+            </div>
+        )}
+
         {/* Action Toolbar */}
-        <div className="absolute bottom-4 right-4 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm p-3 rounded-lg shadow-lg z-20 flex items-center gap-4 border border-gray-200 dark:border-gray-700">
-            <button
-                onClick={() => setIsAssetModalOpen(true)}
-                className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-300 rounded-lg hover:bg-cyan-500 hover:text-white dark:hover:bg-cyan-600 transition-colors flex items-center font-semibold"
-                title="资产库"
+        <div className="absolute bottom-4 right-4 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm p-3 rounded-lg shadow-lg z-20 flex flex-wrap items-center gap-2 md:gap-4 border border-gray-200 dark:border-gray-700">
+             <button
+                onClick={() => setIsHelpModalOpen(true)}
+                className="p-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-300 rounded-lg hover:bg-cyan-500 hover:text-white dark:hover:bg-cyan-600 transition-colors flex items-center font-semibold"
+                title="帮助与示例"
             >
-                <LibraryIcon className="h-5 w-5 mr-2" />
-                资产库
+                <QuestionMarkCircleIcon className="h-5 w-5" />
             </button>
             <button
+                onClick={() => setIsAssetModalOpen(true)}
+                className="p-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-300 rounded-lg hover:bg-cyan-500 hover:text-white dark:hover:bg-cyan-600 transition-colors flex items-center font-semibold"
+                title="资产库"
+            >
+                <LibraryIcon className="h-5 w-5" />
+            </button>
+            
+            <div className="flex items-center space-x-2">
+                <label htmlFor="word-count-input" className="text-sm font-medium text-gray-600 dark:text-gray-300">目标字数:</label>
+                <input
+                    id="word-count-input"
+                    type="number"
+                    value={targetWordCount}
+                    onChange={(e) => setTargetWordCount(e.target.value)}
+                    placeholder="约 2000"
+                    className="bg-gray-200 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-sm rounded-lg focus:ring-cyan-500 focus:border-cyan-500 block w-24 p-2 transition-colors"
+                    disabled={isAnyTaskRunning}
+                    step="500"
+                />
+            </div>
+
+            <div className="h-6 w-px bg-gray-300 dark:bg-gray-600"></div>
+
+            <button
                 onClick={handleGenerateOutline}
-                disabled={!!generatingTask}
+                disabled={isAnyTaskRunning}
                 className="px-4 py-2 bg-cyan-600 text-white font-semibold rounded-lg hover:bg-cyan-500 transition-colors disabled:bg-gray-400 dark:disabled:bg-gray-600 disabled:cursor-not-allowed flex items-center"
             >
-                {generatingTask === 'outline' ? (
-                <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                ) : '生成大纲'}
+                生成大纲
             </button>
 
             <button
                 onClick={handleGenerateStory}
-                disabled={!!generatingTask || !outline}
+                disabled={isAnyTaskRunning || !outline}
                 className="px-4 py-2 bg-emerald-600 text-white font-semibold rounded-lg hover:bg-emerald-500 transition-colors disabled:bg-gray-400 dark:disabled:bg-gray-600 disabled:cursor-not-allowed flex items-center"
             >
-                {generatingTask === 'story' ? (
-                 <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                ) : '生成故事'}
+                生成故事
             </button>
         </div>
 
@@ -674,52 +927,79 @@ const App: React.FC = () => {
         />
       </main>
 
-      <Modal isOpen={modalContent === 'outline'} onClose={() => setModalContent(null)} title="生成的故事大纲">
-        {isEditingOutline ? (
-            <textarea
-                className="w-full h-96 bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-200 p-4 rounded-md border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-cyan-500 font-mono"
-                value={outline}
-                onChange={(e) => setOutline(e.target.value)}
-            />
-        ) : (
-            <div className="w-full h-96 bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-200 p-4 rounded-md border border-gray-200 dark:border-gray-700 overflow-y-auto">
-                <MarkdownRenderer content={outline} />
+      <HelpModal isOpen={isHelpModalOpen} onClose={() => setIsHelpModalOpen(false)} onLoadExample={handleLoadExample} />
+
+      <Modal isOpen={modalContent === 'outline' && !!outline} onClose={() => setModalContent(null)} title={`故事大纲: ${outline?.title || ''}`}>
+         <div className="w-full max-h-[70vh] bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-200 p-4 rounded-md border border-gray-200 dark:border-gray-700 overflow-y-auto">
+                <div className="space-y-6">
+                    {outline?.segments.map((segment, index) => (
+                        <div key={index} className="p-4 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
+                            <h3 className="text-xl font-bold text-cyan-600 dark:text-cyan-400 mb-3 border-b border-cyan-500/30 pb-2">
+                                {segment.chapters ? `第 ${index + 1} 部分: ` : ''}{segment.segment_title}
+                                <span className="text-sm font-normal text-gray-500 dark:text-gray-400 ml-3">(预计 {segment.estimated_word_count} 字)</span>
+                            </h3>
+                            <div className="space-y-4 pl-4">
+                                {segment.chapters ? (
+                                    segment.chapters.map(chapter => (
+                                        <div key={chapter.chapter_number}>
+                                            <h4 className="font-semibold text-gray-800 dark:text-gray-200">{`第 ${chapter.chapter_number} 章: ${chapter.chapter_title}`}</h4>
+                                            {(chapter.point_of_view || chapter.setting) && (
+                                                <p className="text-xs text-gray-500 dark:text-gray-400 italic mb-1">
+                                                {chapter.point_of_view && `视角: ${chapter.point_of_view}`}
+                                                {chapter.point_of_view && chapter.setting && ' | '}
+                                                {chapter.setting && `场景: ${chapter.setting}`}
+                                                </p>
+                                            )}
+                                            <ul className="list-disc list-inside text-gray-600 dark:text-gray-300 space-y-1 text-sm">
+                                                {chapter.key_events.map((event, eventIdx) => (
+                                                    <li key={eventIdx}>{event}</li>
+                                                ))}
+                                            </ul>
+                                        </div>
+                                    ))
+                                ) : segment.key_events ? (
+                                    <div>
+                                        <h4 className="font-semibold text-gray-800 dark:text-gray-200">关键情节</h4>
+                                        <ul className="list-disc list-inside text-gray-600 dark:text-gray-300 space-y-1 text-sm">
+                                            {segment.key_events.map((event, eventIdx) => (
+                                                <li key={eventIdx}>{event}</li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                ) : null}
+                            </div>
+                        </div>
+                    ))}
+                </div>
             </div>
-        )}
         <div className="mt-4 flex justify-between items-center">
              <div>
                 <button
-                    onClick={() => setIsEditingOutline(prev => !prev)}
-                    className="px-4 py-2 bg-gray-300 dark:bg-gray-600 text-gray-800 dark:text-white font-semibold rounded-lg hover:bg-gray-400 dark:hover:bg-gray-500 transition-colors mr-2"
-                >
-                    {isEditingOutline ? '预览' : '编辑'}
-                </button>
-                <button
-                    onClick={() => handleCopy(outline)}
+                    onClick={() => handleCopy(JSON.stringify(outline, null, 2))}
                     className="p-2 bg-gray-300 dark:bg-gray-600 text-gray-800 dark:text-white rounded-lg hover:bg-gray-400 dark:hover:bg-gray-500 transition-colors mr-2"
-                    title="复制"
+                    title="复制大纲 (JSON)"
                 >
                     <CopyIcon className="h-5 w-5"/>
                 </button>
                 <button
-                    onClick={() => handleDownload(outline, 'story-outline')}
+                    onClick={() => handleDownload(JSON.stringify(outline, null, 2), `${outline?.title || 'story-outline'}`)}
                     className="p-2 bg-gray-300 dark:bg-gray-600 text-gray-800 dark:text-white rounded-lg hover:bg-gray-400 dark:hover:bg-gray-500 transition-colors"
-                    title="下载"
+                    title="下载大纲 (JSON)"
                 >
                     <DownloadIcon className="h-5 w-5"/>
                 </button>
             </div>
             <button 
                 onClick={handleGenerateStory}
-                disabled={!!generatingTask || !outline}
+                disabled={isAnyTaskRunning || !outline}
                 className="px-5 py-2 bg-emerald-600 text-white font-semibold rounded-lg hover:bg-emerald-500 transition-colors disabled:bg-gray-400 dark:disabled:bg-gray-600"
             >
-                 {generatingTask === 'story' ? '生成中...' : '开始创作'}
+                 {activeProgressTask === 'story' ? '生成中...' : '开始创作'}
             </button>
         </div>
       </Modal>
 
-      <Modal isOpen={modalContent === 'story'} onClose={() => setModalContent(null)} title="生成的故事">
+      <Modal isOpen={modalContent === 'story'} onClose={() => setModalContent(null)} title={`故事: ${outline?.title || ''}`}>
         <div className="flex w-full max-h-[70vh]">
             {storyHeadings.length > 0 && (
                 <nav className="w-64 flex-shrink-0 pr-4 border-r border-gray-200 dark:border-gray-700 overflow-y-auto">
@@ -756,7 +1036,7 @@ const App: React.FC = () => {
                 <CopyIcon className="h-5 w-5"/>
             </button>
             <button
-                onClick={() => handleDownload(story, 'story')}
+                onClick={() => handleDownload(story, `故事-${outline?.title || 'story'}`)}
                 className="p-2 bg-gray-300 dark:bg-gray-600 text-gray-800 dark:text-white rounded-lg hover:bg-gray-400 dark:hover:bg-gray-500 transition-colors"
                 title="下载"
             >
@@ -781,10 +1061,10 @@ const App: React.FC = () => {
                                 <button
                                     onClick={() => {
                                         if (asset.type === 'outline') {
-                                            setOutline(asset.content);
+                                            setOutline(asset.content as StructuredOutline);
                                             setModalContent('outline');
                                         } else {
-                                            setStory(asset.content);
+                                            setStory(asset.content as string);
                                             setModalContent('story');
                                         }
                                         setIsAssetModalOpen(false);
@@ -794,7 +1074,10 @@ const App: React.FC = () => {
                                     预览
                                 </button>
                                 <button
-                                    onClick={() => handleDownload(asset.content, asset.title)}
+                                    onClick={() => {
+                                        const content = typeof asset.content === 'string' ? asset.content : JSON.stringify(asset.content, null, 2);
+                                        handleDownload(content, asset.title);
+                                    }}
                                     className="p-2 bg-gray-300 dark:bg-gray-600 text-gray-800 dark:text-white rounded-lg hover:bg-gray-400 dark:hover:bg-gray-500 transition-colors"
                                     title="下载"
                                 >
@@ -807,6 +1090,23 @@ const App: React.FC = () => {
             )}
         </div>
       </Modal>
+      
+      <AlertModal
+        isOpen={alertModal.isOpen}
+        onClose={closeAlert}
+        title={alertModal.title}
+      >
+        <p>{alertModal.message}</p>
+      </AlertModal>
+
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        onCancel={closeConfirm}
+        onConfirm={handleConfirm}
+        title={confirmModal.title}
+      >
+        <p>{confirmModal.message}</p>
+      </ConfirmModal>
 
     </div>
   );

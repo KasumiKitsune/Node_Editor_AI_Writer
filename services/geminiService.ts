@@ -1,5 +1,5 @@
 import { GoogleGenAI, Type } from "@google/genai";
-import { Node, Edge, NodeType, CharacterNodeData, SettingNodeData, PlotNodeData, StyleNodeData, StructureNodeData, StructureCategory, WorkNodeData, KeyValueField, EnvironmentNodeData } from '../types';
+import { Node, Edge, NodeType, CharacterNodeData, SettingNodeData, PlotNodeData, StyleNodeData, StructureNodeData, StructureCategory, WorkNodeData, KeyValueField, EnvironmentNodeData, StructuredOutline, Chapter } from '../types';
 import { PLOT_DESCRIPTIONS } from '../plotDescriptions';
 import { STORY_PLOTS, STORY_STYLES, STORY_STRUCTURES } from '../constants';
 
@@ -152,47 +152,127 @@ const getBasePrompt = (nodes: Node[]): { systemInstruction: string, taskInstruct
     if (workNode) {
         if (workNode.data.mode === 'rewrite') {
             return {
-                systemInstruction: "你是一位才华横溢的编辑和作家。你的任务是根据用户提供的原始文本和一组新的结构化节点，对故事进行彻底的重写。",
-                taskInstruction: "请根据下方提供的【原始作品】和新的【情节节点】、【人物设定】等组件，创作一个全新的、完整的故事大纲。你的任务是重写，而不是续写。"
+                systemInstruction: "You are a story rewriting tool. Your task is to process user-provided text and structural nodes to create a new story outline. Follow the user's structural plan precisely.",
+                taskInstruction: "Based on the provided 【Original Work】 and the new structural components, create a new, logically sound story outline in JSON format."
             };
         } else { // continue mode
             return {
-                systemInstruction: "你是一位能够无缝衔接他人风格的续写专家。你的任务是基于一个已有的故事开头，继续创作后续的情节。",
-                taskInstruction: "请根据下方提供的【原始作品】，严格按照【情节节点】的顺序和内容，续写故事。**非常重要：你的输出绝对不能包含【原始作品】的任何内容，只输出新创作的续写部分。**"
+                systemInstruction: "You are a story continuation tool. Your task is to extend an existing story based on a set of new plot nodes.",
+                taskInstruction: "Based on the provided 【Original Work】, continue the story strictly following the order and content of the 【Plot Nodes】. Generate a structured outline for the new sections only. **CRITICAL: Your output must not include any content from the 【Original Work】; only output the new continuation part.**"
             };
         }
     }
     // Default mode: create from scratch
     return {
-        systemInstruction: "你是一位经验丰富的作家兼故事结构分析师。你的任务是根据用户提供的组件，创作一份详细、连贯且引人入胜的故事大纲。",
-        taskInstruction: "请基于以下所有信息，生成一份逻辑清晰的故事大纲。大纲应包含主要情节转折、角色动机和场景描述。"
+        systemInstruction: "You are a story outlining tool. Your task is to convert a set of structured nodes into a logical, JSON-formatted story outline. Adhere strictly to the user's provided components.",
+        taskInstruction: "Based on all the information below, generate a logically sound, structured story outline in JSON format."
     };
 };
 
 
-export const generateOutline = async (nodes: Node[], edges: Edge[], language: string, model: string): Promise<string> => {
+export const generateOutline = async (nodes: Node[], edges: Edge[], language: string, model: string, targetWordCount?: number): Promise<StructuredOutline> => {
   const serializedData = serializeGraph(nodes, edges);
   if (!serializedData.trim()) {
-    return "错误：没有足够的信息来生成大纲。请添加一些节点和连接。";
+    throw new Error("没有足够的信息来生成大纲。请添加一些节点和连接。");
   }
   
   const { systemInstruction, taskInstruction } = getBasePrompt(nodes);
+  const isShortStory = targetWordCount !== undefined && targetWordCount <= 3000;
+
+  const wordCountInstruction = targetWordCount 
+    ? `The user's target for the entire story is approximately ${targetWordCount} words. Distribute this word count realistically.`
+    : `The user has not specified a word count. Aim for a concise story structure suitable for a short story (around 2000-4000 words total) unless the number of plot nodes suggests a longer form.`;
+
+  let storyStructureInstruction: string;
+  let responseSchema: any;
+
+  if (isShortStory) {
+    storyStructureInstruction = `2.  **No Chapters**: This is a short story, so you MUST NOT create chapters. Create a single segment and provide a concise, bullet-point list of \`key_events\` for the entire story directly within that segment.`;
+    responseSchema = {
+        type: Type.OBJECT,
+        properties: {
+            title: { type: Type.STRING, description: "The overall title of the story." },
+            segments: {
+                type: Type.ARRAY,
+                description: "An array containing a single story segment.",
+                items: {
+                    type: Type.OBJECT,
+                    properties: {
+                        segment_title: { type: Type.STRING, description: "The title for the story's single part." },
+                        estimated_word_count: { type: Type.NUMBER, description: "The estimated word count for the story." },
+                        key_events: {
+                            type: Type.ARRAY,
+                            description: "A concise, bullet-point list of key events for the story.",
+                            items: { type: Type.STRING }
+                        },
+                    },
+                    required: ["segment_title", "estimated_word_count", "key_events"]
+                }
+            }
+        },
+        required: ["title", "segments"]
+    };
+  } else {
+    storyStructureInstruction = `2.  **Segments and Chapters**: Divide the story into logical Segments, and then subdivide each Segment into multiple Chapters.
+3.  **Key Events**: For each chapter, you must provide a concise, bullet-point list of \`key_events\`. These should be actions, decisions, or revelations, not descriptive paragraphs.`;
+    responseSchema = {
+        type: Type.OBJECT,
+        properties: {
+            title: { type: Type.STRING, description: "The overall title of the story." },
+            segments: {
+                type: Type.ARRAY,
+                description: "An array of story segments. A segment is a major part of the story and can contain multiple chapters.",
+                items: {
+                    type: Type.OBJECT,
+                    properties: {
+                        segment_title: { type: Type.STRING, description: "The title of this specific segment." },
+                        estimated_word_count: { type: Type.NUMBER, description: "The estimated word count for this segment (e.g., 2000)." },
+                        chapters: {
+                            type: Type.ARRAY,
+                            description: "An array of chapters within this segment.",
+                            items: {
+                                type: Type.OBJECT,
+                                properties: {
+                                    chapter_number: { type: Type.NUMBER, description: "The sequential number of the chapter in the whole story." },
+                                    chapter_title: { type: Type.STRING, description: "The title of this chapter." },
+                                    key_events: {
+                                        type: Type.ARRAY,
+                                        description: "A concise, bullet-point list of key events that must happen in this chapter.",
+                                        items: { type: Type.STRING }
+                                    },
+                                    point_of_view: { type: Type.STRING, description: "Optional. The character's perspective from which this chapter is told." },
+                                    setting: { type: Type.STRING, description: "Optional. The primary location or setting for this chapter." }
+                                },
+                                required: ["chapter_number", "chapter_title", "key_events"]
+                            }
+                        }
+                    },
+                    required: ["segment_title", "estimated_word_count", "chapters"]
+                }
+            }
+        },
+        required: ["title", "segments"]
+    };
+  }
 
   const prompt = `
 ${taskInstruction}
 
-重要指令：
-- **全局风格**: 如果提供了【全局写作风格】，它将作为整个故事的基调。你必须在整个大纲的构思中始终贯穿这些风格。
-- **局部风格**: 对于指定了【局部写作风格】的情节节点，你必须严格遵守该指令。它会覆盖全局风格，用于在故事的特定部分创造独特的氛围或叙事效果。
-- **指令的严肃性**: 所有的风格指令都是必须遵守的硬性要求，不是建议。例如，如果指定了“第一人称叙事”，大纲中对应的部分必须以第一人称的口吻来构思和描述。这是绝对的命令。
-- **融合**: 大纲需要将所有情节节点和设定有机地融合起来，形成一个完整的故事框架。
+**CRITICAL INSTRUCTIONS:**
+1.  **Structural Outline**: Your primary task is to create a well-formatted, structural outline, not a prose summary.
+${storyStructureInstruction}
+4.  **JSON Output**: You MUST return your response as a valid JSON object. Do not include any text, notes, or markdown formatting outside of the JSON structure.
+5.  **JSON Structure**: The JSON must match the specified schema precisely.
+6.  **Word Count**: ${wordCountInstruction}
+7.  **Fusion**: The outline must organically integrate all plot nodes and settings into a complete story framework.
+8.  **Style Integration**: Consider all provided style instructions when formulating the key events.
 
-以下是用户提供的故事组件：
+Below are the story components provided by the user:
 ---
 ${serializedData}
 ---
 
-最终大纲请使用 **${language}** 写作。
+Please generate the structured story outline in **${language}**.
 `;
 
   try {
@@ -200,74 +280,109 @@ ${serializedData}
         model,
         contents: prompt,
         config: {
-            systemInstruction
+            systemInstruction,
+            responseMimeType: "application/json",
+            responseSchema: responseSchema
         }
     });
-    return response.text;
+    const jsonText = response.text.trim();
+    return JSON.parse(jsonText) as StructuredOutline;
   } catch (error) {
     console.error("Error generating outline:", error);
-    return `生成大纲时出错: ${error instanceof Error ? error.message : '未知错误'}`;
+    let errorMessage = `生成大纲时出错: ${error instanceof Error ? error.message : '未知错误'}`;
+    if (error instanceof SyntaxError) {
+        errorMessage += "\nAI返回的格式可能不正确，无法解析。";
+    }
+    throw new Error(errorMessage);
   }
 };
 
-const getStoryBasePrompt = (nodes: Node[]): { systemInstruction: string, taskInstruction: string } => {
-    const workNode = nodes.find(n => n.type === NodeType.WORK) as Node<WorkNodeData> | undefined;
-    if (workNode) {
-        if (workNode.data.mode === 'rewrite') {
-            return {
-                systemInstruction: "你是一位技艺精湛的文学编辑。你的任务不是从头重写，而是对现有文本进行精准的修订，使其符合新的结构要求。",
-                taskInstruction: "你的任务是**编辑和修改**下方的【原始作品】，使其完全符合【故事大纲】中的新情节和结构。**核心要求**：尽可能多地保留【原始作品】的原文、风格和对话。只在为了融入新大纲内容而**绝对必要**时才进行修改或重写。你的目标是一次“微创手术式”的修订，而不是一次彻底的重写。未受大纲变化影响的部分应与原文保持一致。"
-            };
-        } else { // continue mode
-            return {
-                systemInstruction: "你是一位能够模仿任何写作风格并无缝续写故事的文学大师。",
-                taskInstruction: "请根据【原始作品】的上下文和风格，严格按照下面的【故事大纲】续写故事。**极端重要：你的回答必须只包含新写的部分，绝对不要重复任何【原始作品】的内容。** 这是一个硬性要求。"
-            };
-        }
-    }
-    // Default mode
+const getStoryBasePrompt = (): { systemInstruction: string } => {
     return {
-        systemInstruction: "你是一位世界级的作家。请根据以下详细的故事大纲，创作一篇完整的作品。",
-        taskInstruction: "你必须严格遵循大纲中的角色设定、故事背景和情节发展。"
+        systemInstruction: "You are a writing generation tool. Your task is to write a chapter of a story based *strictly* on the provided components, outline, and context. Do not deviate from the plan. Adhere only to the instructions given."
     };
 };
 
-export const generateStory = async (nodes: Node[], edges: Edge[], outline: string, language: string, model: string): Promise<string> => {
-  const workNode = nodes.find(n => n.type === NodeType.WORK) as Node<WorkNodeData> | undefined;
-  const { systemInstruction, taskInstruction } = getStoryBasePrompt(nodes);
-  
-  let originalWorkSection = "";
-  if (workNode) {
-    originalWorkSection = `
-**原始作品 (仅供参考):**
+export const generateShortStory = async (nodes: Node[], edges: Edge[], outline: StructuredOutline, language: string, model: string): Promise<string> => {
+    const { systemInstruction } = getStoryBasePrompt();
+    const segment = outline.segments[0];
+    const serializedData = serializeGraph(nodes, edges);
+
+    const prompt = `
+**CRITICAL INSTRUCTIONS:**
+1.  **WRITE THE COMPLETE STORY**: Your task is to write a complete short story in one go.
+2.  **NO CHAPTERS**: Do not add any chapter headings or numbers. The output should be a single, continuous piece of prose.
+3.  **FOLLOW THE PLAN**: You must strictly adhere to the plot points listed in the "STORY PLAN".
+4.  **STYLE**: You must absolutely adhere to any global or local style instructions provided in the "FULL STORY COMPONENTS".
+5.  **WORD COUNT**: The target word count is approximately **${segment.estimated_word_count} words**.
+6.  **LANGUAGE**: Write in **${language}**.
+
 ---
-${workNode.data.content}
+**FULL STORY COMPONENTS (For Reference):**
+${serializedData}
 ---
+**STORY PLAN (Your Task):**
+-   **Story Title**: ${outline.title}
+-   **Key Events to Cover**: 
+    - ${(segment.key_events || []).join('\n    - ')}
+---
+
+Now, begin writing the complete short story.
 `;
-  }
-  
+    try {
+        const response = await ai.models.generateContent({
+            model,
+            contents: prompt,
+            config: {
+                systemInstruction
+            }
+        });
+        return response.text;
+    } catch (error) {
+        console.error("Error generating short story:", error);
+        throw new Error(`生成短篇故事时出错: ${error instanceof Error ? error.message : '未知错误'}`);
+    }
+};
+
+
+export const generateStoryChapter = async (nodes: Node[], edges: Edge[], outline: StructuredOutline, previousText: string, segmentIndex: number, chapterIndex: number, language: string, model: string): Promise<string> => {
+  const { systemInstruction } = getStoryBasePrompt();
+  const currentSegment = outline.segments[segmentIndex];
+  const currentChapter = currentSegment.chapters![chapterIndex];
   const serializedData = serializeGraph(nodes, edges);
 
   const prompt = `
-重要要求：
-- **任务**: ${taskInstruction}
-- **核心原则**: 你必须将【故事大纲】中的要点自然地融入叙事，**避免生硬地直接使用情节节点的标题词语（例如，不要在文中直接写出“解救”、“获得”这样的词）**。你的任务是讲述一个体现了节点内涵的故事，而不是对大纲进行简单的填充。
-- **文风要求**: 故事的叙述应成熟、含蓄，避免说教或过于幼稚的口吻。通过角色的行为和对话来展现主题，而不是直接陈述道理。
-- **遵守风格指令**: 【故事组件】中可能包含【全局写作风格】和【局部写作风格】。你必须绝对遵守这些指令。全局风格是整篇作品的基调，而局部风格则应用于特定部分。这是一个绝对指令，不是建议。例如，如果全局风格要求“第一人称叙事”，整篇文章都必须使用“我”来叙述，除非某个局部风格另有指定。不遵守此项指令是不可接受的。
-- **章节**: 如果故事篇幅较长，可以酌情分为多个章节。如果内容紧凑，则无需分章。如果分章，请使用“# 第一章”、“## 场景一”等Markdown格式作为章节标题。
-- **语言**: 整篇作品必须使用 **${language}** 写作。
+**CRITICAL INSTRUCTIONS:**
+1.  **WRITE ONE CHAPTER**: Your task is to write the *next chapter* of an ongoing story. You must seamlessly connect your writing to the end of the "STORY SO FAR".
+2.  **MARKDOWN HEADING**: Your output for this chapter **MUST** start with a Markdown H2 heading containing the chapter number and title. For example: \`## 第 ${currentChapter.chapter_number} 章：${currentChapter.chapter_title}\`. There should be a newline after the heading.
+3.  **DO NOT REPEAT**: Your output must **ONLY** contain the new heading and text for the *current chapter*. **ABSOLUTELY DO NOT** repeat any part of the "STORY SO FAR" section.
+4.  **FOLLOW THE PLAN**: You must strictly adhere to the plot points listed in the "CURRENT CHAPTER PLAN". This is your primary guide.
+5.  **STYLE**: You must absolutely adhere to any global or local style instructions provided in the "FULL STORY COMPONENTS".
+6.  **WORD COUNT**: The estimated word count for this chapter's parent segment is **${currentSegment.estimated_word_count} words**. Write this chapter concisely to contribute to that total without exceeding it.
+7.  **LANGUAGE**: Write in **${language}**.
 
-${originalWorkSection}
-
-**故事组件 (包含详细释义，供你理解深层内涵):**
 ---
+**FULL STORY COMPONENTS (For Reference):**
 ${serializedData}
 ---
+**FULL STORY OUTLINE (For Reference):**
+${JSON.stringify(outline, null, 2)}
+---
+**STORY SO FAR (Context - DO NOT REPEAT IN YOUR OUTPUT):**
+\`\`\`
+${previousText || "This is the very first chapter. Start the story."}
+\`\`\`
+---
+**CURRENT CHAPTER PLAN (Your Immediate Task):**
+-   **Chapter Number**: ${currentChapter.chapter_number}
+-   **Chapter Title**: ${currentChapter.chapter_title}
+-   **Key Events to Cover**: 
+    - ${currentChapter.key_events.join('\n    - ')}
+-   **Point of View**: ${currentChapter.point_of_view || 'Default'}
+-   **Setting**: ${currentChapter.setting || 'Default'}
+---
 
-**故事大纲 (这是你创作的直接依据):**
----
-${outline}
----
+Now, begin writing the text for the current chapter, starting with the H2 markdown heading.
 `;
 
   try {
@@ -280,8 +395,8 @@ ${outline}
     });
     return response.text;
   } catch (error) {
-    console.error("Error generating story:", error);
-    return `生成作品时出错: ${error instanceof Error ? error.message : '未知错误'}`;
+    console.error("Error generating story chapter:", error);
+    throw new Error(`生成故事章节时出错: ${error instanceof Error ? error.message : '未知错误'}`);
   }
 };
 
@@ -295,19 +410,49 @@ const serializeLibraryForPrompt = () => {
     return text;
 };
 
-export const analyzeWork = async (content: string, model: string): Promise<any> => {
+const serializeExistingNodesForContext = (nodes: Node[]): string => {
+    if (nodes.length === 0) {
+        return "画布当前为空。";
+    }
+
+    let context = "画布上已存在以下元素，请勿重复创建：\n";
+    const characters = nodes.filter(n => n.type === NodeType.CHARACTER).map(n => `"${(n.data as CharacterNodeData).title}"`);
+    const settings = nodes.filter(n => n.type === NodeType.SETTING).map(n => `"${(n.data as SettingNodeData).title}"`);
+    const plots = nodes.filter(n => n.type === NodeType.PLOT).map(n => `"${(n.data as PlotNodeData).title}"`);
+    const environments = nodes.filter(n => n.type === NodeType.ENVIRONMENT).map(n => `"${(n.data as EnvironmentNodeData).title}"`);
+    const works = nodes.filter(n => n.type === NodeType.WORK).map(n => `"${(n.data as WorkNodeData).title}"`);
+
+    if (characters.length > 0) context += `- 人物: ${characters.join(', ')}\n`;
+    if (settings.length > 0) context += `- 设定: ${settings.join(', ')}\n`;
+    if (environments.length > 0) context += `- 环境/地点: ${environments.join(', ')}\n`;
+    if (plots.length > 0) context += `- 情节: ${plots.join(', ')}\n`;
+    if (works.length > 0) context += `- 作品: ${works.join(', ')}\n`;
+
+    return context;
+}
+
+export const analyzeWork = async (content: string, existingNodes: Node[], model: string): Promise<any> => {
     const libraryText = serializeLibraryForPrompt();
+    const existingNodesContext = serializeExistingNodesForContext(existingNodes);
+
     const prompt = `
-你是一个专业的文学分析师。请仔细阅读以下文学作品，并将其分解为结构化的JSON对象。
+你是一个专业的文学分析师。请仔细阅读【待分析的作品】，并将其分解为结构化的JSON对象。
 
 **重要指令:**
-1.  **区分设定与环境**: 你必须区分宏观的“作品设定” (settings) 和具体的“环境/地点” (environments)。
+1.  **参考现有元素**: 首先，请参考【画布上已存在的元素】。你的核心任务是从作品中提取**新的、尚未存在**的信息。
+2.  **避免重复**: **绝对不要**为【画布上已存在的元素】中列出的项目创建重复的节点。例如，如果人物“张三”已经存在，即使作品中提到了他，你也不应在JSON中再次生成他。
+3.  **区分设定与环境**: 你必须区分宏观的“作品设定” (settings) 和具体的“环境/地点” (environments)。
     *   **作品设定 (settings)**: 这是指世界观、核心规则、魔法体系等抽象概念。**目标是只生成一个核心的作品设定对象**，除非原文明确存在多个完全不同的世界观。
     *   **环境/地点 (environments)**: 这是指故事中出现的具体地点，如城市、建筑、森林等。请提取所有提到的具体地点。对于每个地点，**提取其关键特征或描述**，并将其放入 \`fields\` 数组中（例如：\`{ key: "氛围", value: "阴森恐怖" }\`）。
-2.  **匹配优先**: 对于\`plots\`、\`styles\`和\`structures\`，你必须优先从下方提供的【可用库】中寻找最匹配的选项。
-3.  **返回ID**: 如果找到匹配项，请在JSON对象中返回该项的\`id\`。
-4.  **填写userInput**: 将作品中与该匹配项相关的具体、独特的细节，填写到\`userInput\`字段中。这非常重要，它可以保留原文的精髓。
-5.  **自定义**: 如果在库中找不到任何合适的匹配项，请将\`id\`设为\`null\`，并自行提供\`title\`和\`description\`。
+4.  **匹配优先**: 对于\`plots\`、\`styles\`和\`structures\`，你必须优先从下方提供的【可用库】中寻找最匹配的选项。
+5.  **返回ID**: 如果找到匹配项，请在JSON对象中返回该项的\`id\`。
+6.  **填写userInput**: 将作品中与该匹配项相关的具体、独特的细节，填写到\`userInput\`字段中。这非常重要，它可以保留原文的精髓。
+7.  **自定义**: 如果在库中找不到任何合适的匹配项，请将\`id\`设为\`null\`，并自行提供\`title\`和\`description\`。
+
+**画布上已存在的元素:**
+---
+${existingNodesContext}
+---
 
 **可用库:**
 ---
@@ -415,15 +560,16 @@ ${content}
     }
 };
 
-export const expandSetting = async (settingData: SettingNodeData, model: string): Promise<any> => {
+export const expandSetting = async (settingData: SettingNodeData, existingNodes: Node[], model: string): Promise<any> => {
     const settingText = `标题: ${settingData.title}\n` + settingData.fields.map(f => `${f.key}: ${f.value}`).join('\n');
     const plotLibraryText = "可用情节库:\n" + STORY_PLOTS.map(p => `- id: ${p.id}, name: ${p.name}`).join('\n');
     const styleLibraryText = "可用风格库:\n" + STORY_STYLES.map(s => `- id: ${s.id}, name: ${s.name}, category: ${s.category}`).join('\n');
     const structureLibraryText = "可用结构库:\n" + STORY_STRUCTURES.map(s => `- id: ${s.id}, name: ${s.name}, category: ${s.category}`).join('\n');
+    const existingNodesContext = serializeExistingNodesForContext(existingNodes);
 
     const prompt = `
 你是一位富有想象力的世界构建大师和故事创意总监。
-根据以下提供的【原始作品设定】，请进行创意扩展，生成一些可能存在于这个世界中的新元素，并建立它们之间的联系。
+根据以下提供的【原始作品设定】，并参考【画布上已存在的元素】，进行创意扩展。
 
 **可用库:**
 ---
@@ -434,16 +580,21 @@ ${styleLibraryText}
 ${structureLibraryText}
 ---
 
-**原始作品设定:**
+**原始作品设定 (本次扩展的核心):**
 ---
 ${settingText}
 ---
 
+**画布上已存在的元素 (供你参考，避免重复):**
+---
+${existingNodesContext}
+---
+
 **指令:**
-1.  **生成多样化节点**: 创造一些相关的 \`characters\` (人物), \`plots\` (情节线索), \`environments\` (更具体的地点), \`styles\` (风格), 以及一对 \`structures\` (一个开头和一个结尾)。
+1.  **生成补充性节点**: 你的任务是创造与【原始作品设定】相关，且与【画布上已存在的元素】**不重复**的新元素。你需要生成一些新的 \`characters\` (人物), \`plots\` (情节线索), \`environments\` (更具体的地点), \`styles\` (风格), 以及一对 \`structures\` (一个开头和一个结尾)。
 2.  **匹配库**: 对于 \`plots\`, \`styles\` 和 \`structures\`，你**必须**从上方的【可用库】中选择最匹配的选项，并返回其 \`id\`。不要创建库中不存在的项目。
-3.  **保持一致性**: 所有新生成的元素都必须与原始设定的风格和内容保持高度一致。
-4.  **生成连接**: 同时，生成一个 \`connections\` 数组，描述你创建的节点之间，以及它们与原始设定节点之间的关系。在 \`connections\` 中，使用节点的标题(\`title\`)来指代节点。例如：\`{ "sourceTitle": "${settingData.title}", "targetTitle": "新角色标题" }\` 或 \`{ "sourceTitle": "新地点标题", "targetTitle": "新情节标题" }\`。
+3.  **保持一致性**: 所有新生成的元素都必须与【原始作品设定】的风格和内容保持高度一致。
+4.  **生成连接**: 同时，生成一个 \`connections\` 数组，描述你创建的节点之间，以及它们与**画布上任何已有节点**（包括原始设定节点）的合理关系。在 \`connections\` 中，使用节点的标题(\`title\`)来指代节点。例如：\`{ "sourceTitle": "${settingData.title}", "targetTitle": "新角色标题" }\` 或 \`{ "sourceTitle": "已存在的环境节点标题", "targetTitle": "新情节标题" }\`。
 5.  **返回JSON**: 必须严格按照指定的JSON格式返回结果。
 `;
 
