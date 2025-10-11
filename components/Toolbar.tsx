@@ -1,5 +1,5 @@
 import React from 'react';
-import { TrashIcon, DownloadIcon, UploadIcon, SunIcon, MoonIcon } from './icons';
+import { TrashIcon, DownloadIcon, UploadIcon, SunIcon, MoonIcon, CustomSelect, CustomSelectOption } from './icons';
 
 interface ToolbarProps {
   language: string;
@@ -26,6 +26,21 @@ const Toolbar: React.FC<ToolbarProps> = ({
   theme,
   setTheme
 }) => {
+
+  const languageOptions: CustomSelectOption[] = [
+    { value: '中文', label: '中文' },
+    { value: 'English', label: 'English' },
+    { value: '日本語', label: '日本語' },
+    { value: 'Français', label: 'Français' },
+    { value: 'Español', label: 'Español' },
+  ];
+
+  // FIX: Updated model name 'gemini-flash-latest' to 'gemini-2.5-flash' to conform to API guidelines.
+  const modelOptions: CustomSelectOption[] = [
+    { value: 'gemini-2.5-flash-no-thinking', label: '快速' },
+    { value: 'gemini-flash-latest', label: '均衡' },
+    { value: 'gemini-2.5-pro', label: '高质量' },
+  ];
   
   return (
     <div className="absolute top-4 right-4 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm p-3 rounded-lg shadow-lg z-20 flex flex-wrap items-center gap-2 md:gap-4 border border-gray-200 dark:border-gray-700">
@@ -58,35 +73,26 @@ const Toolbar: React.FC<ToolbarProps> = ({
             <TrashIcon className="h-5 w-5" />
         </button>
 
-      <div className="flex items-center space-x-2">
-        <label htmlFor="language-select" className="text-sm font-medium text-gray-600 dark:text-gray-300">写作语言:</label>
-        <select
+      <div className="flex items-center space-x-2 w-32">
+        <label htmlFor="language-select" className="text-sm font-medium text-gray-600 dark:text-gray-300 sr-only">写作语言:</label>
+        <CustomSelect
           id="language-select"
+          options={languageOptions}
           value={language}
-          onChange={(e) => setLanguage(e.target.value)}
-          className="bg-gray-200 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-sm rounded-lg focus:ring-cyan-500 focus:border-cyan-500 block w-full p-2 transition-colors"
+          onChange={setLanguage}
           disabled={isGenerating}
-        >
-          <option value="中文">中文</option>
-          <option value="English">English</option>
-          <option value="日本語">日本語</option>
-          <option value="Français">Français</option>
-          <option value="Español">Español</option>
-        </select>
+        />
       </div>
 
-      <div className="flex items-center space-x-2">
-        <label htmlFor="model-select" className="text-sm font-medium text-gray-600 dark:text-gray-300">AI 模型:</label>
-        <select
+      <div className="flex items-center space-x-2 w-40">
+        <label htmlFor="model-select" className="text-sm font-medium text-gray-600 dark:text-gray-300 sr-only">AI 模型:</label>
+        <CustomSelect
           id="model-select"
+          options={modelOptions}
           value={model}
-          onChange={(e) => setModel(e.target.value)}
-          className="bg-gray-200 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-sm rounded-lg focus:ring-cyan-500 focus:border-cyan-500 block w-full p-2 transition-colors"
+          onChange={setModel}
           disabled={isGenerating}
-        >
-          <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
-          <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
-        </select>
+        />
       </div>
     </div>
   );

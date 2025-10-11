@@ -139,6 +139,7 @@ const StructureAccordionItem: React.FC<{ category: StructureCategory, structures
 const Sidebar: React.FC<SidebarProps> = ({ onAddNode, isOpen }) => {
   const [customPlot, setCustomPlot] = useState('');
   const [customStyle, setCustomStyle] = useState('');
+  const [activeFilter, setActiveFilter] = useState<'all' | 'structure' | 'plot' | 'style'>('all');
 
   const handleAddCustomPlot = () => {
     if (customPlot.trim()) {
@@ -157,12 +158,20 @@ const Sidebar: React.FC<SidebarProps> = ({ onAddNode, isOpen }) => {
   const sidebarClasses = isOpen
     ? 'translate-x-0'
     : '-translate-x-full';
+    
+  const getFilterButtonClasses = (filter: typeof activeFilter) => {
+      const base = "w-full text-center px-3 py-1 rounded-md transition-colors font-medium";
+      if (activeFilter === filter) {
+          return `${base} bg-cyan-600 text-white shadow`;
+      }
+      return `${base} text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-700`;
+  }
 
   return (
     <div className={`fixed top-0 left-0 h-full w-72 bg-gray-100 dark:bg-gray-800 shadow-lg z-30 flex flex-col p-4 border-r border-gray-200 dark:border-gray-700 transition-transform duration-300 ease-in-out md:translate-x-0 md:relative md:z-20 ${sidebarClasses}`}>
       <h1 className="text-2xl font-bold mb-4 text-cyan-600 dark:text-cyan-400">节点库</h1>
       
-      <div className="grid grid-cols-2 gap-2 mb-6 text-white">
+      <div className="grid grid-cols-2 gap-2 mb-4 text-white">
         <button onClick={() => onAddNode(NodeType.WORK)} className="w-full flex items-center justify-center p-2 rounded-md bg-emerald-600 hover:bg-emerald-500 transition-colors font-semibold text-sm">
           <BookOpenIcon className="h-4 w-4 mr-2"/>
           添加作品
@@ -181,70 +190,83 @@ const Sidebar: React.FC<SidebarProps> = ({ onAddNode, isOpen }) => {
         </button>
       </div>
 
+      <div className="flex justify-between items-center mb-4 p-1 bg-gray-200 dark:bg-gray-700/50 rounded-lg text-sm space-x-1">
+        <button onClick={() => setActiveFilter('all')} className={getFilterButtonClasses('all')}>全部</button>
+        <button onClick={() => setActiveFilter('structure')} className={getFilterButtonClasses('structure')}>首尾</button>
+        <button onClick={() => setActiveFilter('plot')} className={getFilterButtonClasses('plot')}>情节</button>
+        <button onClick={() => setActiveFilter('style')} className={getFilterButtonClasses('style')}>风格</button>
+      </div>
+
       <div className="flex-grow overflow-y-auto bg-white dark:bg-gray-900 rounded-md divide-y-2 divide-gray-200 dark:divide-gray-800">
-        <div>
-            <h2 className="text-lg font-semibold my-2 text-yellow-500 dark:text-yellow-400 pl-3">首尾类型</h2>
-            {STRUCTURE_CATEGORIES.map(category => (
-                <StructureAccordionItem
-                key={category}
-                category={category}
-                structures={STORY_STRUCTURES.filter(p => p.category === category)}
-                onAddNode={onAddNode}
+        {(activeFilter === 'all' || activeFilter === 'structure') && (
+            <div>
+                <h2 className="text-lg font-semibold my-2 text-yellow-500 dark:text-yellow-400 pl-3">首尾类型</h2>
+                {STRUCTURE_CATEGORIES.map(category => (
+                    <StructureAccordionItem
+                    key={category}
+                    category={category}
+                    structures={STORY_STRUCTURES.filter(p => p.category === category)}
+                    onAddNode={onAddNode}
+                    />
+                ))}
+            </div>
+        )}
+        {(activeFilter === 'all' || activeFilter === 'plot') && (
+            <div>
+              <h2 className="text-lg font-semibold my-2 text-cyan-600 dark:text-cyan-400 pl-3">情节类型</h2>
+              <div className="p-3">
+                 <div className="flex space-x-2">
+                    <input 
+                        type="text" 
+                        value={customPlot}
+                        onChange={(e) => setCustomPlot(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && handleAddCustomPlot()}
+                        placeholder="自定义情节..."
+                        className="w-full bg-gray-200 dark:bg-gray-700 text-sm p-2 rounded focus:outline-none focus:ring-2 focus:ring-cyan-500 transition-colors"
+                    />
+                    <button onClick={handleAddCustomPlot} className="p-2 rounded-md bg-cyan-600 hover:bg-cyan-500 transition-colors text-white">
+                        <PlusIcon className="h-5 w-5"/>
+                    </button>
+                 </div>
+              </div>
+              {PLOT_CATEGORIES.map(category => (
+                <PlotAccordionItem
+                  key={category}
+                  category={category}
+                  plots={STORY_PLOTS.filter(p => p.category === category)}
+                  onAddNode={onAddNode}
                 />
-            ))}
-        </div>
-        <div>
-          <h2 className="text-lg font-semibold my-2 text-cyan-600 dark:text-cyan-400 pl-3">情节类型</h2>
-          <div className="p-3">
-             <div className="flex space-x-2">
-                <input 
-                    type="text" 
-                    value={customPlot}
-                    onChange={(e) => setCustomPlot(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleAddCustomPlot()}
-                    placeholder="自定义情节..."
-                    className="w-full bg-gray-200 dark:bg-gray-700 text-sm p-2 rounded focus:outline-none focus:ring-2 focus:ring-cyan-500 transition-colors"
+              ))}
+            </div>
+        )}
+        {(activeFilter === 'all' || activeFilter === 'style') && (
+            <div>
+              <h2 className="text-lg font-semibold my-2 text-pink-500 dark:text-pink-400 pl-3">风格类型</h2>
+               <div className="p-3">
+                 <div className="flex space-x-2">
+                    <input 
+                        type="text" 
+                        value={customStyle}
+                        onChange={(e) => setCustomStyle(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && handleAddCustomStyle()}
+                        placeholder="自定义风格..."
+                        className="w-full bg-gray-200 dark:bg-gray-700 text-sm p-2 rounded focus:outline-none focus:ring-2 focus:ring-pink-500 transition-colors"
+                    />
+                    <button onClick={handleAddCustomStyle} className="p-2 rounded-md bg-pink-600 hover:bg-pink-500 transition-colors text-white">
+                        <PlusIcon className="h-5 w-5"/>
+                    </button>
+                 </div>
+              </div>
+              {STYLE_CATEGORIES.map(category => (
+                <StyleAccordionItem
+                  key={category}
+                  category={category}
+                  styles={STORY_STYLES.filter(p => p.category === category)}
+                  onAddNode={onAddNode}
                 />
-                <button onClick={handleAddCustomPlot} className="p-2 rounded-md bg-cyan-600 hover:bg-cyan-500 transition-colors text-white">
-                    <PlusIcon className="h-5 w-5"/>
-                </button>
-             </div>
-          </div>
-          {PLOT_CATEGORIES.map(category => (
-            <PlotAccordionItem
-              key={category}
-              category={category}
-              plots={STORY_PLOTS.filter(p => p.category === category)}
-              onAddNode={onAddNode}
-            />
-          ))}
-        </div>
-        <div>
-          <h2 className="text-lg font-semibold my-2 text-pink-500 dark:text-pink-400 pl-3">风格类型</h2>
-           <div className="p-3">
-             <div className="flex space-x-2">
-                <input 
-                    type="text" 
-                    value={customStyle}
-                    onChange={(e) => setCustomStyle(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleAddCustomStyle()}
-                    placeholder="自定义风格..."
-                    className="w-full bg-gray-200 dark:bg-gray-700 text-sm p-2 rounded focus:outline-none focus:ring-2 focus:ring-pink-500 transition-colors"
-                />
-                <button onClick={handleAddCustomStyle} className="p-2 rounded-md bg-pink-600 hover:bg-pink-500 transition-colors text-white">
-                    <PlusIcon className="h-5 w-5"/>
-                </button>
-             </div>
-          </div>
-          {STYLE_CATEGORIES.map(category => (
-            <StyleAccordionItem
-              key={category}
-              category={category}
-              styles={STORY_STYLES.filter(p => p.category === category)}
-              onAddNode={onAddNode}
-            />
-          ))}
-        </div>
+              ))}
+            </div>
+        )}
       </div>
        <style>{`
         @keyframes fade-in {

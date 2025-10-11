@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback, MouseEvent, TouchEvent, useEffect } from 'react';
-import { Node, Edge, NodeType, SettingNodeData } from '../types';
+import { Node, Edge, NodeType, SettingNodeData, WorkNodeData } from '../types';
 import NodeComponent from './NodeComponent';
 import { XIcon } from './icons';
 
@@ -214,11 +214,11 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ nodes, edges, onNodesChange, on
             const targetHandleId = targetHandle.getAttribute('data-handle-id') || 'flow';
             
             let isValidConnection = false;
-            if (sourceNode?.type === NodeType.STYLE && 
-                (targetNode?.type === NodeType.PLOT || targetNode?.type === NodeType.SETTING) && 
-                targetHandleId === 'style') {
+            const isStyleSource = sourceNode?.type === NodeType.STYLE || (sourceNode?.type === NodeType.WORK && (sourceNode.data as WorkNodeData).mode === 'parody');
+
+            if (isStyleSource && (targetNode?.type === NodeType.PLOT || targetNode?.type === NodeType.SETTING) && targetHandleId === 'style') {
                 isValidConnection = true;
-            } else if (sourceNode?.type !== NodeType.STYLE && targetHandleId === 'flow') {
+            } else if (!isStyleSource && targetHandleId === 'flow') {
                 isValidConnection = true;
             }
 
@@ -376,11 +376,14 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ nodes, edges, onNodesChange, on
         {nodes.map(node => {
             let connectableTargetType: 'style' | 'flow' | null = null;
             if (sourceNodeWhenConnecting && sourceNodeWhenConnecting.id !== node.id) {
-                if (sourceNodeWhenConnecting.type === NodeType.STYLE) {
+                const isStyleSource = sourceNodeWhenConnecting.type === NodeType.STYLE ||
+                                      (sourceNodeWhenConnecting.type === NodeType.WORK && (sourceNodeWhenConnecting.data as WorkNodeData).mode === 'parody');
+
+                if (isStyleSource) {
                     if ([NodeType.PLOT, NodeType.SETTING].includes(node.type)) {
                         connectableTargetType = 'style';
                     }
-                } else { // Source is not a STYLE node
+                } else { // Source is a flow source
                     if ([NodeType.PLOT, NodeType.STRUCTURE, NodeType.CHARACTER, NodeType.ENVIRONMENT].includes(node.type)) {
                         connectableTargetType = 'flow';
                     }

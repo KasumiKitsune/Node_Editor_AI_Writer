@@ -98,7 +98,8 @@ export interface StructureNodeData {
 export interface WorkNodeData {
     title: string;
     content: string;
-    mode: 'rewrite' | 'continue';
+    mode: 'rewrite' | 'continue' | 'parody';
+    parodyLevel?: 'reference' | 'imitation' | '套作';
 }
 
 export type NodeData = PlotNodeData | CharacterNodeData | SettingNodeData | StyleNodeData | StructureNodeData | WorkNodeData | EnvironmentNodeData;

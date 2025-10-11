@@ -1,174 +1,21 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { Node, Edge, NodeType, CharacterNodeData, SettingNodeData, PlotNodeData, StyleNodeData, StructureNodeData, StructureCategory, WorkNodeData, KeyValueField, EnvironmentNodeData, StructuredOutline, Chapter } from '../types';
-import { PLOT_DESCRIPTIONS } from '../plotDescriptions';
+import { serializeGraph, getBasePrompt, serializeLibraryForPrompt, serializeExistingNodesForContext } from './gemini.helpers';
+// FIX: Added import for STORY_PLOTS, STORY_STYLES, and STORY_STRUCTURES to resolve reference errors in the expandSetting function.
 import { STORY_PLOTS, STORY_STYLES, STORY_STRUCTURES } from '../constants';
 
 // FIX: The API key is now sourced directly from `process.env.API_KEY` during initialization, and the prior manual check has been removed, aligning with the project's setup assumptions.
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-function serializeGraph(nodes: Node[], edges: Edge[]): string {
-  let serialized = "";
-
-  const workNode = nodes.find(n => n.type === NodeType.WORK) as Node<WorkNodeData> | undefined;
-  const characters = nodes.filter(n => n.type === NodeType.CHARACTER) as Node<CharacterNodeData>[];
-  const settings = nodes.filter(n => n.type === NodeType.SETTING) as Node<SettingNodeData>[];
-  const environments = nodes.filter(n => n.type === NodeType.ENVIRONMENT) as Node<EnvironmentNodeData>[];
-  const plots = nodes.filter(n => n.type === NodeType.PLOT) as Node<PlotNodeData>[];
-  const structures = nodes.filter(n => n.type === NodeType.STRUCTURE) as Node<StructureNodeData>[];
-  const startNode = structures.find(s => s.data.category === StructureCategory.STARTING);
-  const endNode = structures.find(s => s.data.category === StructureCategory.ENDING);
-  
-  if (workNode) {
-      const modeText = workNode.data.mode === 'rewrite' ? '改写模式' : '续写模式';
-      serialized += `**原始作品 (${modeText}):**\n`;
-      serialized += "```\n";
-      serialized += `${workNode.data.content}\n`;
-      serialized += "```\n\n";
-  }
-
-  const globalStyleEdges = edges.filter(e => {
-    const sourceNode = nodes.find(n => n.id === e.source);
-    const targetNode = nodes.find(n => n.id === e.target);
-    return sourceNode?.type === NodeType.STYLE && targetNode?.type === NodeType.SETTING;
-  });
-
-  if (globalStyleEdges.length > 0) {
-    serialized += "**全局写作风格:** (应用于整个故事)\n";
-    globalStyleEdges.forEach(edge => {
-        const styleNode = nodes.find(n => n.id === edge.source) as Node<StyleNodeData>;
-        if (styleNode) {
-             serialized += `*   **${styleNode.data.title}**: *释义: ${styleNode.data.description}*\n`;
-        }
-    });
-    serialized += "\n";
-  }
-
-  if (characters.length > 0) {
-    serialized += "**人物设定:**\n";
-    characters.forEach((char, index) => {
-      serialized += `*   **${char.data.title || `人物 ${index + 1}`}:**\n`;
-      char.data.fields.forEach(field => {
-        if(field.key && field.value) serialized += `    *   ${field.key}: ${field.value}\n`;
-      });
-    });
-    serialized += "\n";
-  }
-
-  if (settings.length > 0) {
-    serialized += "**作品设定 (世界观、核心概念):**\n";
-    settings.forEach((setting, index) => {
-      serialized += `*   **${setting.data.title || `设定 ${index + 1}`}:**\n`;
-      if (setting.data.narrativeStructure && setting.data.narrativeStructure !== 'single') {
-        const structureText = setting.data.narrativeStructure === 'dual' ? '双线叙事' : '明暗双线叙事';
-        serialized += `    *   叙事脉络: ${structureText}\n`;
-      }
-      setting.data.fields.forEach(field => {
-        if(field.key && field.value) serialized += `    *   ${field.key}: ${field.value}\n`;
-      });
-    });
-    serialized += "\n";
-  }
-  
-  if (environments.length > 0) {
-    serialized += "**环境/地点设定:**\n";
-    environments.forEach((env, index) => {
-      serialized += `*   **${env.data.title || `地点 ${index + 1}`}:**\n`;
-      env.data.fields.forEach(field => {
-        if(field.key && field.value) serialized += `    *   ${field.key}: ${field.value}\n`;
-      });
-    });
-    serialized += "\n";
-  }
-
-
-  const allPlotNodes = [
-      ...(startNode ? [startNode] : []),
-      ...plots,
-      ...(endNode ? [endNode] : [])
-  ];
-
-  if (allPlotNodes.length > 0) {
-    serialized += "**情节节点:**\n";
-    allPlotNodes.forEach(node => {
-      if (node.type === NodeType.PLOT) {
-        const plot = node as Node<PlotNodeData>;
-        const plotDescription = PLOT_DESCRIPTIONS[plot.data.plotId as keyof typeof PLOT_DESCRIPTIONS] || plot.data.description;
-        serialized += `*   **${plot.data.title}**: ${plotDescription}\n`;
-        if (plot.data.userInput && plot.data.userInput.trim() !== '') {
-          serialized += `    *   **用户额外需求**: ${plot.data.userInput}\n`;
-        }
-      } else if (node.type === NodeType.STRUCTURE) {
-        const structure = node as Node<StructureNodeData>;
-        const prefix = structure.data.category === StructureCategory.STARTING ? '开头' : '结尾';
-        serialized += `*   **${prefix}: ${structure.data.title}**: ${structure.data.description}\n`;
-        if (structure.data.userInput && structure.data.userInput.trim() !== '') {
-          serialized += `    *   **用户额外需求**: ${structure.data.userInput}\n`;
-        }
-      }
-
-      const connectedStyleEdge = edges.find(e => {
-          const sourceNode = nodes.find(n => n.id === e.source);
-          return sourceNode?.type === NodeType.STYLE && e.target === node.id;
-      });
-      
-      if(connectedStyleEdge) {
-          const styleNode = nodes.find(n => n.id === connectedStyleEdge.source) as Node<StyleNodeData>;
-          if (styleNode) {
-              const method = styleNode.data.applicationMethod === 'appropriate' ? '适当应用' : '作为该部分核心风格';
-              serialized += `    *   **局部写作风格**: ${styleNode.data.title} - *释义: ${styleNode.data.description}* (${method})\n`
-          }
-      }
-    });
-    serialized += "\n";
-  }
-
-  if (edges.length > 0) {
-    serialized += "**情节关联:**\n";
-    edges.forEach(edge => {
-      const sourceNode = nodes.find(n => n.id === edge.source);
-      const targetNode = nodes.find(n => n.id === edge.target);
-      if (sourceNode && targetNode && sourceNode.type !== NodeType.STYLE && targetNode.type !== NodeType.CHARACTER) { // Exclude style & character connections from flow
-        let sourceTitle = (sourceNode.data as any).title || (sourceNode.data as any).name;
-        if (sourceNode.type === NodeType.SETTING && edge.sourceHandle) {
-             const settingData = sourceNode.data as SettingNodeData;
-            if (settingData.narrativeStructure === 'dual') {
-                sourceTitle += ` (${edge.sourceHandle === 'source_a' ? '故事线A' : '故事线B'})`;
-            } else if (settingData.narrativeStructure === 'light_dark') {
-                sourceTitle += ` (${edge.sourceHandle === 'source_a' ? '明线' : '暗线'})`;
-            }
-        }
-
-        const targetTitle = (targetNode.data as any).title || (targetNode.data as any).name;
-        serialized += `*   '${sourceTitle}' 连接到 '${targetTitle}'\n`;
-      }
-    });
-  }
-
-  return serialized;
-}
-
-const getBasePrompt = (nodes: Node[]): { systemInstruction: string, taskInstruction: string } => {
-    const workNode = nodes.find(n => n.type === NodeType.WORK) as Node<WorkNodeData> | undefined;
-    if (workNode) {
-        if (workNode.data.mode === 'rewrite') {
-            return {
-                systemInstruction: "You are a story rewriting tool. Your task is to process user-provided text and structural nodes to create a new story outline. Follow the user's structural plan precisely.",
-                taskInstruction: "Based on the provided 【Original Work】 and the new structural components, create a new, logically sound story outline in JSON format."
-            };
-        } else { // continue mode
-            return {
-                systemInstruction: "You are a story continuation tool. Your task is to extend an existing story based on a set of new plot nodes.",
-                taskInstruction: "Based on the provided 【Original Work】, continue the story strictly following the order and content of the 【Plot Nodes】. Generate a structured outline for the new sections only. **CRITICAL: Your output must not include any content from the 【Original Work】; only output the new continuation part.**"
-            };
-        }
+const getModelConfig = (model: string, baseConfig: any = {}) => {
+    let effectiveModel = model;
+    const config = { ...baseConfig };
+    if (model === 'gemini-2.5-flash-no-thinking') {
+        effectiveModel = 'gemini-2.5-flash';
+        config.thinkingConfig = { thinkingBudget: 0 };
     }
-    // Default mode: create from scratch
-    return {
-        systemInstruction: "You are a story outlining tool. Your task is to convert a set of structured nodes into a logical, JSON-formatted story outline. Adhere strictly to the user's provided components.",
-        taskInstruction: "Based on all the information below, generate a logically sound, structured story outline in JSON format."
-    };
+    return { effectiveModel, config };
 };
-
 
 export const generateOutline = async (nodes: Node[], edges: Edge[], language: string, model: string, targetWordCount?: number): Promise<StructuredOutline> => {
   const serializedData = serializeGraph(nodes, edges);
@@ -276,14 +123,16 @@ Please generate the structured story outline in **${language}**.
 `;
 
   try {
+    const { effectiveModel, config } = getModelConfig(model, {
+        systemInstruction,
+        responseMimeType: "application/json",
+        responseSchema: responseSchema
+    });
+
     const response = await ai.models.generateContent({
-        model,
+        model: effectiveModel,
         contents: prompt,
-        config: {
-            systemInstruction,
-            responseMimeType: "application/json",
-            responseSchema: responseSchema
-        }
+        config: config
     });
     const jsonText = response.text.trim();
     return JSON.parse(jsonText) as StructuredOutline;
@@ -330,12 +179,11 @@ ${serializedData}
 Now, begin writing the complete short story.
 `;
     try {
+        const { effectiveModel, config } = getModelConfig(model, { systemInstruction });
         const response = await ai.models.generateContent({
-            model,
+            model: effectiveModel,
             contents: prompt,
-            config: {
-                systemInstruction
-            }
+            config: config
         });
         return response.text;
     } catch (error) {
@@ -386,12 +234,11 @@ Now, begin writing the text for the current chapter, starting with the H2 markdo
 `;
 
   try {
+    const { effectiveModel, config } = getModelConfig(model, { systemInstruction });
     const response = await ai.models.generateContent({
-        model,
+        model: effectiveModel,
         contents: prompt,
-        config: {
-            systemInstruction
-        }
+        config: config
     });
     return response.text;
   } catch (error) {
@@ -399,37 +246,6 @@ Now, begin writing the text for the current chapter, starting with the H2 markdo
     throw new Error(`生成故事章节时出错: ${error instanceof Error ? error.message : '未知错误'}`);
   }
 };
-
-const serializeLibraryForPrompt = () => {
-    let text = "可用情节库:\n";
-    STORY_PLOTS.forEach(p => text += `- id: ${p.id}, name: ${p.name}\n`);
-    text += "\n可用风格库:\n";
-    STORY_STYLES.forEach(s => text += `- id: ${s.id}, name: ${s.name}, category: ${s.category}\n`);
-    text += "\n可用结构库:\n";
-    STORY_STRUCTURES.forEach(s => text += `- id: ${s.id}, name: ${s.name}, category: ${s.category}\n`);
-    return text;
-};
-
-const serializeExistingNodesForContext = (nodes: Node[]): string => {
-    if (nodes.length === 0) {
-        return "画布当前为空。";
-    }
-
-    let context = "画布上已存在以下元素，请勿重复创建：\n";
-    const characters = nodes.filter(n => n.type === NodeType.CHARACTER).map(n => `"${(n.data as CharacterNodeData).title}"`);
-    const settings = nodes.filter(n => n.type === NodeType.SETTING).map(n => `"${(n.data as SettingNodeData).title}"`);
-    const plots = nodes.filter(n => n.type === NodeType.PLOT).map(n => `"${(n.data as PlotNodeData).title}"`);
-    const environments = nodes.filter(n => n.type === NodeType.ENVIRONMENT).map(n => `"${(n.data as EnvironmentNodeData).title}"`);
-    const works = nodes.filter(n => n.type === NodeType.WORK).map(n => `"${(n.data as WorkNodeData).title}"`);
-
-    if (characters.length > 0) context += `- 人物: ${characters.join(', ')}\n`;
-    if (settings.length > 0) context += `- 设定: ${settings.join(', ')}\n`;
-    if (environments.length > 0) context += `- 环境/地点: ${environments.join(', ')}\n`;
-    if (plots.length > 0) context += `- 情节: ${plots.join(', ')}\n`;
-    if (works.length > 0) context += `- 作品: ${works.join(', ')}\n`;
-
-    return context;
-}
 
 export const analyzeWork = async (content: string, existingNodes: Node[], model: string): Promise<any> => {
     const libraryText = serializeLibraryForPrompt();
@@ -439,15 +255,16 @@ export const analyzeWork = async (content: string, existingNodes: Node[], model:
 你是一个专业的文学分析师。请仔细阅读【待分析的作品】，并将其分解为结构化的JSON对象。
 
 **重要指令:**
-1.  **参考现有元素**: 首先，请参考【画布上已存在的元素】。你的核心任务是从作品中提取**新的、尚未存在**的信息。
-2.  **避免重复**: **绝对不要**为【画布上已存在的元素】中列出的项目创建重复的节点。例如，如果人物“张三”已经存在，即使作品中提到了他，你也不应在JSON中再次生成他。
-3.  **区分设定与环境**: 你必须区分宏观的“作品设定” (settings) 和具体的“环境/地点” (environments)。
-    *   **作品设定 (settings)**: 这是指世界观、核心规则、魔法体系等抽象概念。**目标是只生成一个核心的作品设定对象**，除非原文明确存在多个完全不同的世界观。
-    *   **环境/地点 (environments)**: 这是指故事中出现的具体地点，如城市、建筑、森林等。请提取所有提到的具体地点。对于每个地点，**提取其关键特征或描述**，并将其放入 \`fields\` 数组中（例如：\`{ key: "氛围", value: "阴森恐怖" }\`）。
-4.  **匹配优先**: 对于\`plots\`、\`styles\`和\`structures\`，你必须优先从下方提供的【可用库】中寻找最匹配的选项。
-5.  **返回ID**: 如果找到匹配项，请在JSON对象中返回该项的\`id\`。
-6.  **填写userInput**: 将作品中与该匹配项相关的具体、独特的细节，填写到\`userInput\`字段中。这非常重要，它可以保留原文的精髓。
-7.  **自定义**: 如果在库中找不到任何合适的匹配项，请将\`id\`设为\`null\`，并自行提供\`title\`和\`description\`。
+1.  **识别节点**: 从作品中提取新的、尚未存在的\`characters\`, \`settings\`, \`environments\`, \`plots\`, \`styles\` 和 \`structures\`。
+2.  **避免重复**: **绝对不要**为【画布上已存在的元素】中列出的项目创建重复的节点。
+3.  **区分设定与环境**: 必须区分宏观的“作品设定” (settings) 和具体的“环境/地点” (environments)。设定是世界观，环境是具体地点。
+4.  **匹配优先**: 对于\`plots\`、\`styles\`和\`structures\`，必须优先从【可用库】中寻找最匹配的选项并返回其\`id\`。找不到则将\`id\`设为\`null\`并自行提供\`title\`和\`description\`。
+5.  **填写userInput**: 将作品中与库匹配项相关的具体细节，填写到\`userInput\`字段中。
+6.  **识别叙事结构**: 判断作品是单线还是多线叙事。如果有多条明显的故事线，请将情节分别归入 \`plots_a\` 和 \`plots_b\`。否则，全部放入 \`plots\`。
+7.  **创建连接**: 生成一个 \`connections\` 数组来表示节点间的关系。
+    *   **情节流**: **必须**将所有情节节点（在各自的故事线内）按时间顺序首尾相连，形成连贯的故事线。
+    *   **元素归属**: 将每个识别出的 \`characters\` 和 \`environments\` 节点，连接到它们在故事中首次出现或最关键的那个情节节点上。
+    *   **风格应用**: 将识别出的 \`styles\` 节点，连接到应用了该风格的情节或设定节点上。
 
 **画布上已存在的元素:**
 ---
@@ -468,84 +285,53 @@ ${content}
 `;
 
     try {
-        const response = await ai.models.generateContent({
-            model,
-            contents: prompt,
-            config: {
-                responseMimeType: "application/json",
-                responseSchema: {
-                    type: Type.OBJECT,
-                    properties: {
-                        characters: {
-                            type: Type.ARRAY,
-                            items: {
-                                type: Type.OBJECT,
-                                properties: {
-                                    title: { type: Type.STRING, description: "人物的姓名或称谓" },
-                                    fields: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { key: { type: Type.STRING }, value: { type: Type.STRING } } } }
-                                }
-                            }
-                        },
-                        settings: {
-                             type: Type.ARRAY,
-                            items: {
-                                type: Type.OBJECT,
-                                properties: {
-                                    title: { type: Type.STRING, description: "作品设定的名称 (世界观, 核心概念)" },
-                                    fields: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { key: { type: Type.STRING }, value: { type: Type.STRING } } } }
-                                }
-                            }
-                        },
-                        environments: {
-                             type: Type.ARRAY,
-                            items: {
-                                type: Type.OBJECT,
-                                properties: {
-                                    title: { type: Type.STRING, description: "环境/地点的具体名称" },
-                                    fields: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { key: { type: Type.STRING }, value: { type: Type.STRING } } } }
-                                }
-                            }
-                        },
-                        plots: {
-                            type: Type.ARRAY,
-                            items: {
-                                type: Type.OBJECT,
-                                properties: {
-                                    id: { type: Type.NUMBER, description: "匹配的库ID，或null" },
-                                    title: { type: Type.STRING, description: "情节节点的简洁标题" },
-                                    description: { type: Type.STRING, description: "仅当id为null时提供" },
-                                    userInput: { type: Type.STRING, description: "作品中的具体细节" }
-                                }
-                            }
-                        },
-                        styles: {
-                            type: Type.ARRAY,
-                            items: {
-                                type: Type.OBJECT,
-                                properties: {
-                                    id: { type: Type.NUMBER },
-                                    title: { type: Type.STRING },
-                                    description: { type: Type.STRING },
-                                    userInput: { type: Type.STRING }
-                                }
-                            }
-                        },
-                        structures: {
-                            type: Type.OBJECT,
-                            properties: {
-                                start: {
-                                    type: Type.OBJECT,
-                                    properties: { id: { type: Type.NUMBER }, title: { type: Type.STRING }, description: { type: Type.STRING }, userInput: { type: Type.STRING } }
-                                },
-                                end: {
-                                    type: Type.OBJECT,
-                                    properties: { id: { type: Type.NUMBER }, title: { type: Type.STRING }, description: { type: Type.STRING }, userInput: { type: Type.STRING } }
-                                }
-                            }
-                        }
-                    }
+        const basePlotSchema = {
+            type: Type.ARRAY,
+            items: {
+                type: Type.OBJECT,
+                properties: {
+                    id: { type: Type.NUMBER, description: "匹配的库ID，或null" },
+                    title: { type: Type.STRING, description: "情节节点的简洁标题" },
+                    description: { type: Type.STRING, description: "仅当id为null时提供" },
+                    userInput: { type: Type.STRING, description: "作品中的具体细节" }
                 }
             }
+        };
+
+        // FIX: Defined schema components as constants to resolve "Cannot find name" reference errors.
+        const charactersSchema = { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { title: { type: Type.STRING }, fields: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { key: { type: Type.STRING }, value: { type: Type.STRING } } } } } } };
+        const settingsSchema = { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { title: { type: Type.STRING }, fields: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { key: { type: Type.STRING }, value: { type: Type.STRING } } } } } } };
+        const environmentsSchema = { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { title: { type: Type.STRING }, fields: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { key: { type: Type.STRING }, value: { type: Type.STRING } } } } } } };
+        const plotsSchema = { ...basePlotSchema, description: "单线叙事时的情节" };
+        const plotsASchema = { ...basePlotSchema, description: "多线叙事时的A线情节" };
+        const plotsBSchema = { ...basePlotSchema, description: "多线叙事时的B线情节" };
+        const stylesSchema = { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { id: { type: Type.NUMBER }, title: { type: Type.STRING }, description: { type: Type.STRING }, userInput: { type: Type.STRING } } } };
+        const structurePartSchema = { type: Type.OBJECT, properties: { id: { type: Type.NUMBER }, title: { type: Type.STRING }, description: { type: Type.STRING }, userInput: { type: Type.STRING } } };
+        const structuresSchema = { type: Type.OBJECT, properties: { start: structurePartSchema, end: structurePartSchema } };
+        const connectionsSchema = { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { sourceTitle: { type: Type.STRING }, targetTitle: { type: Type.STRING }, sourceHandle: { type: Type.STRING }, targetHandle: { type: Type.STRING } } } };
+        
+        const { effectiveModel, config } = getModelConfig(model, {
+            responseMimeType: "application/json",
+            responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                    characters: charactersSchema,
+                    settings: settingsSchema,
+                    environments: environmentsSchema,
+                    plots: plotsSchema,
+                    plots_a: plotsASchema,
+                    plots_b: plotsBSchema,
+                    styles: stylesSchema,
+                    structures: structuresSchema,
+                    connections: connectionsSchema
+                }
+            }
+        });
+        
+        const response = await ai.models.generateContent({
+            model: effectiveModel,
+            contents: prompt,
+            config: config
         });
         
         const jsonText = response.text.trim();
@@ -566,6 +352,38 @@ export const expandSetting = async (settingData: SettingNodeData, existingNodes:
     const styleLibraryText = "可用风格库:\n" + STORY_STYLES.map(s => `- id: ${s.id}, name: ${s.name}, category: ${s.category}`).join('\n');
     const structureLibraryText = "可用结构库:\n" + STORY_STRUCTURES.map(s => `- id: ${s.id}, name: ${s.name}, category: ${s.category}`).join('\n');
     const existingNodesContext = serializeExistingNodesForContext(existingNodes);
+
+    const isMultiLine = settingData.narrativeStructure === 'dual' || settingData.narrativeStructure === 'light_dark';
+    const lineAName = settingData.narrativeStructure === 'light_dark' ? '明线' : '故事线A';
+    const lineBName = settingData.narrativeStructure === 'light_dark' ? '暗线' : '故事线B';
+
+    let plotInstructions: string;
+    let plotProperties: any;
+    const plotLineSchema = {
+        type: Type.ARRAY,
+        items: { type: Type.OBJECT, properties: { id: { type: Type.NUMBER, description: "匹配的库ID" } } }
+    };
+
+    if (isMultiLine) {
+        plotProperties = {
+            plots_a: { ...plotLineSchema, description: `与 ${lineAName} 相关的情节线索` },
+            plots_b: { ...plotLineSchema, description: `与 ${lineBName} 相关的情节线索` }
+        };
+        plotInstructions = `
+- **生成双线情节**: 此设定为 **${lineAName}/${lineBName}** 结构。你必须生成 **两组独立的情节**：\`plots_a\` (用于 ${lineAName}) 和 \`plots_b\` (用于 ${lineBName})。
+- **连接情节**: 在 \`connections\` 数组中，你必须:
+    1.  将 \`plots_a\` 中的所有情节首尾相连，形成 **${lineAName}** 的故事流。
+    2.  将 \`plots_b\` 中的所有情节首尾相连，形成 **${lineBName}** 的故事流。
+    3.  这两条故事线应从设定节点的 '${settingData.title}' 分别通过 \`source_a\` 和 \`source_b\` 手柄引出。`;
+    } else {
+        plotProperties = {
+            plots: { ...plotLineSchema, description: "与设定相关的情节线索" }
+        };
+        plotInstructions = `
+- **生成情节**: 基于设定，生成一系列连贯的 \`plots\` (情节)。
+- **连接情节**: 在 \`connections\` 数组中，将所有情节节点首尾相连，形成一个单一的故事流。`;
+    }
+
 
     const prompt = `
 你是一位富有想象力的世界构建大师和故事创意总监。
@@ -591,92 +409,40 @@ ${existingNodesContext}
 ---
 
 **指令:**
-1.  **生成补充性节点**: 你的任务是创造与【原始作品设定】相关，且与【画布上已存在的元素】**不重复**的新元素。你需要生成一些新的 \`characters\` (人物), \`plots\` (情节线索), \`environments\` (更具体的地点), \`styles\` (风格), 以及一对 \`structures\` (一个开头和一个结尾)。
-2.  **匹配库**: 对于 \`plots\`, \`styles\` 和 \`structures\`，你**必须**从上方的【可用库】中选择最匹配的选项，并返回其 \`id\`。不要创建库中不存在的项目。
-3.  **保持一致性**: 所有新生成的元素都必须与【原始作品设定】的风格和内容保持高度一致。
-4.  **生成连接**: 同时，生成一个 \`connections\` 数组，描述你创建的节点之间，以及它们与**画布上任何已有节点**（包括原始设定节点）的合理关系。在 \`connections\` 中，使用节点的标题(\`title\`)来指代节点。例如：\`{ "sourceTitle": "${settingData.title}", "targetTitle": "新角色标题" }\` 或 \`{ "sourceTitle": "已存在的环境节点标题", "targetTitle": "新情节标题" }\`。
+1.  **生成补充性节点**: 你的任务是创造与【原始作品设定】相关，且与【画布上已存在的元素】**不重复**的新元素。你需要生成一些新的 \`characters\` (人物), \`environments\` (更具体的地点), \`styles\` (风格), 以及一对 \`structures\` (一个开头和一个结尾)。
+2.  ${plotInstructions}
+3.  **匹配库**: 对于 \`plots\`, \`styles\` 和 \`structures\`，你**必须**从上方的【可用库】中选择最匹配的选项，并返回其 \`id\`。
+4.  **精准连接**: 对于每一个新生成的 \`characters\` 和 \`environments\` 节点，请在 \`connections\` 数组中将其连接到 **最相关的一个情节节点** 上。不要将所有节点都连接到第一个情节上。
 5.  **返回JSON**: 必须严格按照指定的JSON格式返回结果。
 `;
 
     try {
-        const response = await ai.models.generateContent({
-            model,
-            contents: prompt,
-            config: {
-                responseMimeType: "application/json",
-                responseSchema: {
-                    type: Type.OBJECT,
-                    properties: {
-                        characters: {
-                            type: Type.ARRAY,
-                            items: {
-                                type: Type.OBJECT,
-                                properties: {
-                                    title: { type: Type.STRING, description: "人物的姓名或称谓" },
-                                    fields: {
-                                        type: Type.ARRAY,
-                                        items: { type: Type.OBJECT, properties: { key: { type: Type.STRING }, value: { type: Type.STRING } } }
-                                    }
-                                }
-                            }
-                        },
-                        environments: {
-                             type: Type.ARRAY,
-                            items: {
-                                type: Type.OBJECT,
-                                properties: {
-                                    title: { type: Type.STRING, description: "具体环境/地点的名称" },
-                                    fields: {
-                                        type: Type.ARRAY,
-                                        items: { type: Type.OBJECT, properties: { key: { type: Type.STRING }, value: { type: Type.STRING } } }
-                                    }
-                                }
-                            }
-                        },
-                        plots: {
-                            type: Type.ARRAY,
-                            items: {
-                                type: Type.OBJECT,
-                                properties: {
-                                    id: { type: Type.NUMBER, description: "匹配的库ID" },
-                                }
-                            }
-                        },
-                        styles: {
-                            type: Type.ARRAY,
-                            items: {
-                                type: Type.OBJECT,
-                                properties: {
-                                    id: { type: Type.NUMBER, description: "匹配的库ID" },
-                                }
-                            }
-                        },
-                        structures: {
-                            type: Type.OBJECT,
-                            properties: {
-                                start: {
-                                    type: Type.OBJECT,
-                                    properties: { id: { type: Type.NUMBER } }
-                                },
-                                end: {
-                                    type: Type.OBJECT,
-                                    properties: { id: { type: Type.NUMBER } }
-                                }
-                            }
-                        },
-                        connections: {
-                            type: Type.ARRAY,
-                            items: {
-                                type: Type.OBJECT,
-                                properties: {
-                                    sourceTitle: { type: Type.STRING, description: "源节点的标题" },
-                                    targetTitle: { type: Type.STRING, description: "目标节点的标题" }
-                                }
-                            }
-                        }
-                    }
+        // FIX: Defined schema components as constants to resolve "Cannot find name" reference errors.
+        const charactersSchema = { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { title: { type: Type.STRING }, fields: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { key: { type: Type.STRING }, value: { type: Type.STRING } } } } } } };
+        const environmentsSchema = { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { title: { type: Type.STRING }, fields: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { key: { type: Type.STRING }, value: { type: Type.STRING } } } } } } };
+        const stylesSchema = { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { id: { type: Type.NUMBER, description: "匹配的库ID" } } } };
+        const structuresSchema = { type: Type.OBJECT, properties: { start: { type: Type.OBJECT, properties: { id: { type: Type.NUMBER } } }, end: { type: Type.OBJECT, properties: { id: { type: Type.NUMBER } } } } };
+        const connectionsSchema = { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { sourceTitle: { type: Type.STRING }, targetTitle: { type: Type.STRING }, sourceHandle: { type: Type.STRING }, targetHandle: { type: Type.STRING } } } };
+        
+        const { effectiveModel, config } = getModelConfig(model, {
+            responseMimeType: "application/json",
+            responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                    characters: charactersSchema,
+                    environments: environmentsSchema,
+                    ...plotProperties,
+                    styles: stylesSchema,
+                    structures: structuresSchema,
+                    connections: connectionsSchema
                 }
             }
+        });
+
+        const response = await ai.models.generateContent({
+            model: effectiveModel,
+            contents: prompt,
+            config: config
         });
         
         const jsonText = response.text.trim();
@@ -689,5 +455,75 @@ ${existingNodesContext}
             errorMessage += "\nAI返回的格式可能不正确。";
         }
         throw new Error(errorMessage);
+    }
+};
+
+
+export const reviseOutline = async (outline: StructuredOutline, revisionRequest: string, language: string, model: string): Promise<StructuredOutline> => {
+  const systemInstruction = `You are a story editor. Your task is to revise a story outline provided in JSON format based on the user's request. You must return the complete, full, modified JSON object. Adhere strictly to the original JSON schema. Make minimal changes necessary to fulfill the request. The response language must be ${language}.`;
+
+  const prompt = `
+**USER'S REVISION REQUEST:**
+${revisionRequest}
+
+**ORIGINAL OUTLINE (JSON):**
+\`\`\`json
+${JSON.stringify(outline, null, 2)}
+\`\`\`
+
+**CRITICAL INSTRUCTIONS:**
+1.  Read the user's request carefully.
+2.  Modify the original JSON outline to incorporate the requested changes.
+3.  Ensure the final output is a single, valid JSON object that conforms to the original schema.
+4.  Do not add any text, notes, or markdown formatting outside of the JSON structure.
+`;
+  try {
+    const { effectiveModel, config } = getModelConfig(model, { systemInstruction, responseMimeType: "application/json" });
+    
+    const response = await ai.models.generateContent({
+      model: effectiveModel,
+      contents: prompt,
+      config: config
+    });
+
+    const jsonText = response.text.trim().replace(/^```json\s*|```\s*$/g, '');
+    return JSON.parse(jsonText) as StructuredOutline;
+  } catch (error) {
+    console.error("Error revising outline:", error);
+    throw new Error(`修改大纲时出错: ${error instanceof Error ? error.message : '未知错误'}`);
+  }
+};
+
+
+export const reviseStory = async (story: string, revisionRequest: string, language: string, model: string): Promise<string> => {
+    const systemInstruction = `You are a writing editor. Your task is to revise a story based on the user's request. Make only the necessary changes to fulfill the request while preserving the original style and tone as much as possible. You must return the complete, full, revised story text. The response language must be ${language}.`;
+
+    const prompt = `
+**USER'S REVISION REQUEST:**
+${revisionRequest}
+
+**ORIGINAL STORY:**
+---
+${story}
+---
+
+**CRITICAL INSTRUCTIONS:**
+1.  Read the user's request carefully.
+2.  Revise the original story to incorporate the requested changes.
+3.  Your output must be the complete, full, revised story text.
+4.  Do not add any meta-commentary, notes, or introductions like "Here is the revised story:". Just return the text.
+`;
+
+    try {
+        const { effectiveModel, config } = getModelConfig(model, { systemInstruction });
+        const response = await ai.models.generateContent({
+            model: effectiveModel,
+            contents: prompt,
+            config: config
+        });
+        return response.text;
+    } catch (error) {
+        console.error("Error revising story:", error);
+        throw new Error(`修改故事时出错: ${error instanceof Error ? error.message : '未知错误'}`);
     }
 };

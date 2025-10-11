@@ -1,6 +1,6 @@
 import React from 'react';
 import { Node, NodeType, PlotNodeData, CharacterNodeData, SettingNodeData, StyleNodeData, KeyValueField, StructureNodeData, StructureCategory, WorkNodeData, EnvironmentNodeData } from '../types';
-import { PlusIcon, TrashIcon, XIcon, BookOpenIcon, SparklesIcon, ChevronUpIcon, ChevronDownIcon } from './icons';
+import { PlusIcon, TrashIcon, XIcon, BookOpenIcon, SparklesIcon, ChevronUpIcon, ChevronDownIcon, CustomSelect, CustomSelectOption } from './icons';
 
 const ProgressDisplay: React.FC<{ progress: number }> = ({ progress }) => (
     <div className="relative w-full h-full flex items-center justify-center text-xs">
@@ -83,9 +83,14 @@ const StructureNode: React.FC<{ node: Node<StructureNodeData>, onUpdateData: (da
 
 
 const StyleNode: React.FC<{ node: Node<StyleNodeData>, onUpdateData: (data: StyleNodeData) => void, isCollapsed?: boolean }> = ({ node, onUpdateData, isCollapsed }) => {
-    const handleMethodChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-        onUpdateData({ ...node.data, applicationMethod: e.target.value as 'appropriate' | 'full_section' });
+    const handleMethodChange = (value: string) => {
+        onUpdateData({ ...node.data, applicationMethod: value as 'appropriate' | 'full_section' });
     };
+
+    const styleMethodOptions: CustomSelectOption[] = [
+        { value: 'appropriate', label: '适当插入' },
+        { value: 'full_section', label: '整个部分' },
+    ];
 
     return (
         <>
@@ -95,18 +100,14 @@ const StyleNode: React.FC<{ node: Node<StyleNodeData>, onUpdateData: (data: Styl
             {!isCollapsed && (
                 <div className="p-3 space-y-2 text-sm">
                     <p className="text-gray-600 dark:text-gray-300 italic text-xs">{node.data.description}</p>
-                    <div className="flex items-center space-x-2 pt-1">
+                    <div className="flex items-center space-x-2 pt-1" {...stopPropagationEvents}>
                         <label htmlFor={`style-method-${node.id}`} className="text-xs font-medium text-gray-500 dark:text-gray-300">应用方式:</label>
-                        <select
+                        <CustomSelect
                             id={`style-method-${node.id}`}
+                            options={styleMethodOptions}
                             value={node.data.applicationMethod}
                             onChange={handleMethodChange}
-                            className="bg-gray-200 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-xs rounded-md focus:ring-pink-500 focus:border-pink-500 block w-full p-1 transition-colors"
-                            {...stopPropagationEvents}
-                        >
-                            <option value="appropriate">适当插入</option>
-                            <option value="full_section">整个部分</option>
-                        </select>
+                        />
                     </div>
                 </div>
             )}
@@ -147,9 +148,15 @@ const EditableNode: React.FC<{
     onUpdateData({ ...node.data, title: e.target.value });
   };
 
-  const handleStructureChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    onUpdateData({ ...node.data, narrativeStructure: e.target.value });
+  const handleStructureChange = (value: string) => {
+    onUpdateData({ ...node.data, narrativeStructure: value });
   };
+
+  const narrativeStructureOptions: CustomSelectOption[] = [
+    { value: 'single', label: '单线' },
+    { value: 'dual', label: '双线' },
+    { value: 'light_dark', label: '明暗线' },
+  ];
   
   return (
     <>
@@ -166,19 +173,14 @@ const EditableNode: React.FC<{
       {!isCollapsed && (
         <div className="p-3 space-y-2">
             {node.type === NodeType.SETTING && (
-                <div className="flex items-center space-x-2 pb-2">
-                <label htmlFor={`structure-select-${node.id}`} className="text-xs font-medium text-gray-500 dark:text-gray-300 whitespace-nowrap">叙事脉络:</label>
-                <select
-                    id={`structure-select-${node.id}`}
-                    value={(node.data as SettingNodeData).narrativeStructure}
-                    onChange={handleStructureChange}
-                    className="bg-gray-200 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-xs rounded-md focus:ring-purple-500 focus:border-purple-500 block w-full p-1 transition-colors"
-                    {...stopPropagationEvents}
-                >
-                    <option value="single">单线</option>
-                    <option value="dual">双线</option>
-                    <option value="light_dark">明暗线</option>
-                </select>
+                <div className="flex items-center space-x-2 pb-2" {...stopPropagationEvents}>
+                    <label htmlFor={`structure-select-${node.id}`} className="text-xs font-medium text-gray-500 dark:text-gray-300 whitespace-nowrap">叙事脉络:</label>
+                    <CustomSelect
+                        id={`structure-select-${node.id}`}
+                        options={narrativeStructureOptions}
+                        value={(node.data as SettingNodeData).narrativeStructure}
+                        onChange={handleStructureChange}
+                    />
                 </div>
             )}
             {node.data.fields.map(field => (
@@ -243,9 +245,20 @@ const WorkNode: React.FC<{
     progress: number,
 }> = ({ node, onUpdateData, onAnalyze, isCollapsed, isAnyTaskRunning, isAnalyzingThisNode, progress }) => {
     
-    const handleDataChange = (field: keyof WorkNodeData, value: string) => {
-        onUpdateData({ ...node.data, [field]: value });
+    const handleDataChange = (field: keyof WorkNodeData, value: string | 'reference' | 'imitation' | '套作') => {
+        const newData: WorkNodeData = { ...node.data, [field]: value as any };
+        if (field === 'mode') {
+            if (value === 'parody') {
+                // Set default level when switching to parody mode
+                newData.parodyLevel = node.data.parodyLevel || 'reference';
+            } else {
+                // Clear level when switching away
+                delete newData.parodyLevel;
+            }
+        }
+        onUpdateData(newData);
     };
+
 
     return (
         <>
@@ -270,16 +283,53 @@ const WorkNode: React.FC<{
                         rows={8}
                         {...stopPropagationEvents}
                     />
-                    <div className="flex items-center justify-around text-sm">
-                        <label className="flex items-center space-x-2 cursor-pointer" {...stopPropagationEvents}>
-                            <input type="radio" name={`mode-${node.id}`} value="rewrite" checked={node.data.mode === 'rewrite'} onChange={(e) => handleDataChange('mode', e.target.value)} className="form-radio text-emerald-500 bg-gray-600" />
-                            <span>改写</span>
-                        </label>
-                        <label className="flex items-center space-x-2 cursor-pointer" {...stopPropagationEvents}>
-                            <input type="radio" name={`mode-${node.id}`} value="continue" checked={node.data.mode === 'continue'} onChange={(e) => handleDataChange('mode', e.target.value)} className="form-radio text-emerald-500 bg-gray-600" />
-                            <span>续写</span>
-                        </label>
+                    <div className="flex w-full bg-gray-200 dark:bg-gray-800 rounded-md p-1 space-x-1" {...stopPropagationEvents}>
+                        <button 
+                            onClick={() => handleDataChange('mode', 'rewrite')}
+                            className={`w-full text-center text-sm px-2 py-1 rounded transition-colors font-medium ${node.data.mode === 'rewrite' ? 'bg-emerald-600 text-white shadow' : 'hover:bg-gray-300 dark:hover:bg-gray-700'}`}
+                        >
+                            改写
+                        </button>
+                        <button 
+                            onClick={() => handleDataChange('mode', 'continue')}
+                            className={`w-full text-center text-sm px-2 py-1 rounded transition-colors font-medium ${node.data.mode === 'continue' ? 'bg-emerald-600 text-white shadow' : 'hover:bg-gray-300 dark:hover:bg-gray-700'}`}
+                        >
+                            续写
+                        </button>
+                        <button 
+                            onClick={() => handleDataChange('mode', 'parody')}
+                            className={`w-full text-center text-sm px-2 py-1 rounded transition-colors font-medium ${node.data.mode === 'parody' ? 'bg-emerald-600 text-white shadow' : 'hover:bg-gray-300 dark:hover:bg-gray-700'}`}
+                        >
+                            仿写
+                        </button>
                     </div>
+
+                    {node.data.mode === 'parody' && (
+                        <div className="pt-2">
+                            <label className="block text-xs font-medium text-gray-500 dark:text-gray-300 mb-1">仿写程度:</label>
+                            <div className="flex w-full bg-gray-200 dark:bg-gray-800 rounded-md p-1 space-x-1" {...stopPropagationEvents}>
+                                <button 
+                                    onClick={() => handleDataChange('parodyLevel', 'reference')}
+                                    className={`w-full text-center text-xs px-2 py-1 rounded transition-colors font-medium ${node.data.parodyLevel === 'reference' ? 'bg-emerald-600 text-white shadow' : 'hover:bg-gray-300 dark:hover:bg-gray-700'}`}
+                                >
+                                    参考
+                                </button>
+                                <button 
+                                    onClick={() => handleDataChange('parodyLevel', 'imitation')}
+                                    className={`w-full text-center text-xs px-2 py-1 rounded transition-colors font-medium ${node.data.parodyLevel === 'imitation' ? 'bg-emerald-600 text-white shadow' : 'hover:bg-gray-300 dark:hover:bg-gray-700'}`}
+                                >
+                                    模仿
+                                </button>
+                                <button 
+                                    onClick={() => handleDataChange('parodyLevel', '套作')}
+                                    className={`w-full text-center text-xs px-2 py-1 rounded transition-colors font-medium ${node.data.parodyLevel === '套作' ? 'bg-emerald-600 text-white shadow' : 'hover:bg-gray-300 dark:hover:bg-gray-700'}`}
+                                >
+                                    套作
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
                     {node.data.mode === 'rewrite' && (
                         <button 
                             onClick={onAnalyze} 
@@ -341,8 +391,13 @@ const NodeComponent: React.FC<NodeComponentProps> = ({ node, onUpdateData, onDel
         case NodeType.PLOT:
         case NodeType.CHARACTER:
         case NodeType.ENVIRONMENT:
-        case NodeType.WORK:
              return <div data-handle="source" className={`${baseHandleClasses} ${flowHandleColor}`} />;
+        
+        case NodeType.WORK:
+            if ((node.data as WorkNodeData).mode === 'parody') {
+                return <div data-handle="source" className="absolute -right-2 top-1/2 -translate-y-1/2 w-4 h-4 bg-pink-500 dark:bg-pink-400 rounded-sm border-2 border-white dark:border-gray-800 cursor-crosshair hover:bg-pink-400 dark:hover:bg-pink-300" />;
+            }
+            return <div data-handle="source" className={`${baseHandleClasses} ${flowHandleColor}`} />;
         
         case NodeType.STRUCTURE:
             if ((node.data as StructureNodeData).category === StructureCategory.STARTING) {

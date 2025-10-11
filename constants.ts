@@ -92,6 +92,14 @@ export const STORY_STYLES: Style[] = [
   { id: 306, name: '新闻体', category: StyleCategory.PROSE_STYLE, description: '模仿新闻报道的风格，语言客观、精确、信息密度高，注重事实陈述而非情感渲染。' },
   { id: 307, name: '哥特式', category: StyleCategory.PROSE_STYLE, description: '营造阴森、神秘、恐怖的氛围，常使用古堡、废墟、超自然等元素，语言上倾向于渲染黑暗、死亡和强烈的情感。' },
   { id: 308, name: '反讽/讽刺', category: StyleCategory.PROSE_STYLE, description: '语言的字面意思与其真实意图相反或不符，通过这种反差达到嘲讽、批判或引人深思的效果。' },
+  { id: 309, name: '克制', category: StyleCategory.PROSE_STYLE, description: `核心是“呈现”而非“告知”(Show, Don't Tell)。作者隐藏在幕后，通过客观的场景、动作和对话来驱动故事，将判断和感受的权力完全交给读者。
+特征：
+1. 情感内敛：用“白描”代替直接的抒情。不直接描写角色的内心崩溃，而是通过一个细微的动作或一句平静的话来暗示其巨大的内心波澜。
+2. 避免议论：杜绝作者直接站出来进行总结或贴标签。故事本身就是一切，结尾常在事件发生后戛然而止，留下“留白”和余韵。
+3. 相信细节：一个眼神、一个停顿、一句未说完的话，比大段心理描写更具力量。
+示例：
+- 错误示范（不克制）：“他感到一阵难以言喻的悲伤，眼泪不受控制地流了下来。”
+- 正确示范（克制）：“他沉默着，只是把手里的那封信又对折了一次，指节因为用力而发白。”` },
   
   // 叙事态度 (Narrative Stance)
   { id: 401, name: '现实主义', category: StyleCategory.NARRATIVE_STANCE, description: '致力于客观、细致地描绘日常生活和社会现实，追求细节的真实性和典型性，仿佛生活本身。' },

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 
 // FIX: Updated component props to accept all standard SVG props, including `style`.
 export const PlusIcon: React.FC<React.SVGProps<SVGSVGElement>> = ({ className, ...props }) => (
@@ -111,3 +111,92 @@ export const QuestionMarkCircleIcon: React.FC<React.SVGProps<SVGSVGElement>> = (
         <path strokeLinecap="round" strokeLinejoin="round" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
     </svg>
 );
+
+export const PencilIcon: React.FC<React.SVGProps<SVGSVGElement>> = ({ className, ...props }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" className={className || "h-6 w-6"} fill="none" viewBox="0 0 24 24" stroke="currentColor" {...props}>
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.5L15.232 5.232z" />
+  </svg>
+);
+
+export const DocumentAddIcon: React.FC<React.SVGProps<SVGSVGElement>> = ({ className, ...props }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" className={className || "h-6 w-6"} fill="none" viewBox="0 0 24 24" stroke="currentColor" {...props}>
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+    </svg>
+);
+
+export const CheckIcon: React.FC<React.SVGProps<SVGSVGElement>> = ({ className, ...props }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" className={className || "h-6 w-6"} fill="none" viewBox="0 0 24 24" stroke="currentColor" {...props}>
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+  </svg>
+);
+
+export interface CustomSelectOption {
+  value: string;
+  label: string;
+}
+
+interface CustomSelectProps {
+  options: CustomSelectOption[];
+  value: string;
+  onChange: (value: string) => void;
+  id?: string;
+  disabled?: boolean;
+}
+
+export const CustomSelect: React.FC<CustomSelectProps> = ({ options, value, onChange, id, disabled = false }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const selectRef = useRef<HTMLDivElement>(null);
+  const selectedLabel = options.find(opt => opt.value === value)?.label || options[0]?.label;
+
+  const handleToggle = () => {
+    if (!disabled) setIsOpen(!isOpen);
+  };
+  const handleSelect = (newValue: string) => {
+    onChange(newValue);
+    setIsOpen(false);
+  };
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (selectRef.current && !selectRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const baseClasses = "w-full bg-gray-200 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-sm rounded-lg flex items-center justify-between p-2 transition-colors";
+  const focusClasses = "focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500";
+  const disabledClasses = "disabled:bg-gray-300 dark:disabled:bg-gray-800 disabled:cursor-not-allowed disabled:text-gray-500";
+
+  return (
+    <div className="relative w-full" ref={selectRef}>
+      <button
+        id={id}
+        type="button"
+        onClick={handleToggle}
+        disabled={disabled}
+        className={`${baseClasses} ${!disabled ? focusClasses : ''} ${disabledClasses}`}
+      >
+        <span className="truncate">{selectedLabel}</span>
+        <ChevronDownIcon className={`h-4 w-4 transform transition-transform duration-200 ml-2 flex-shrink-0 ${isOpen ? 'rotate-180' : ''}`} />
+      </button>
+      {isOpen && (
+        <div className="absolute z-20 mt-1 w-full bg-white dark:bg-gray-800 rounded-md shadow-lg border border-gray-200 dark:border-gray-700 max-h-60 overflow-auto animate-fade-in-up" style={{ animationDuration: '150ms'}}>
+          <ul className="py-1">
+            {options.map(option => (
+              <li
+                key={option.value}
+                onClick={() => handleSelect(option.value)}
+                className="px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer"
+              >
+                {option.label}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+};

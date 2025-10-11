@@ -1,17 +1,20 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { Node, Edge, NodeType, CharacterNodeData, SettingNodeData, PlotNodeData, StyleNodeData, StructureNodeData, WorkNodeData, KeyValueField, StructureCategory, EnvironmentNodeData, StructuredOutline } from './types';
-import { generateOutline, generateStoryChapter, generateShortStory, analyzeWork, expandSetting } from './services/geminiService';
+import { generateOutline, generateStoryChapter, generateShortStory, analyzeWork, expandSetting, reviseOutline, reviseStory } from './services/geminiService';
 import { STORY_PLOTS, STORY_STYLES, STORY_STRUCTURES } from './constants';
 import { generalExample, expansionExample, rewriteExample } from './exampleData';
 import Sidebar from './components/Sidebar';
 import NodeEditor from './components/NodeEditor';
 import Toolbar from './components/Toolbar';
-import Modal from './components/Modal';
 import AlertModal from './components/AlertModal';
 import ConfirmModal from './components/ConfirmModal';
-import MarkdownRenderer from './components/MarkdownRenderer';
-import { CopyIcon, DownloadIcon, MenuIcon, XIcon, LibraryIcon, QuestionMarkCircleIcon } from './components/icons';
 import HelpModal, { ExampleName } from './components/HelpModal';
+import GenerationControls from './components/GenerationControls';
+import ResultModals from './components/ResultModals';
+import { useProgress } from './hooks/useProgress';
+// FIX: Added Modal and DownloadIcon to imports to resolve reference errors.
+import Modal from './components/Modal';
+import { MenuIcon, XIcon, DownloadIcon, PencilIcon, CheckIcon, DocumentAddIcon, TrashIcon } from './components/icons';
 
 interface Asset {
     type: 'outline' | 'story';
@@ -26,26 +29,28 @@ interface Heading {
   level: number;
 }
 
-
 const App: React.FC = () => {
   const [nodes, setNodes] = useState<Node[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
   const [language, setLanguage] = useState<string>('中文');
-  const [model, setModel] = useState<string>('gemini-2.5-flash');
+  // FIX: Updated the default model from 'gemini-flash-latest' to 'gemini-2.5-flash' to align with current API guidelines.
+  const [model, setModel] = useState<string>('gemini-flash-latest');
   const [theme, setTheme] = useState<'light' | 'dark'>(() => (localStorage.getItem('theme') as 'light' | 'dark') || 'dark');
   const [targetWordCount, setTargetWordCount] = useState<string>('');
 
-  const [progress, setProgress] = useState(0);
-  const [progressMessage, setProgressMessage] = useState('');
-  const [activeProgressTask, setActiveProgressTask] = useState<string | null>(null);
+  const { progress, progressMessage, activeProgressTask, isAnyTaskRunning, setProgressMessage, startProgress, stopProgress } = useProgress();
 
   const [modalContent, setModalContent] = useState<'outline' | 'story' | null>(null);
   const [outline, setOutline] = useState<StructuredOutline | null>(null);
   const [story, setStory] = useState<string>('');
   const [storyHeadings, setStoryHeadings] = useState<Heading[]>([]);
+  const [revisionPrompt, setRevisionPrompt] = useState('');
 
   const [assetLibrary, setAssetLibrary] = useState<Asset[]>([]);
   const [isAssetModalOpen, setIsAssetModalOpen] = useState(false);
+  const [renamingAssetId, setRenamingAssetId] = useState<string | null>(null);
+  const [editingAssetName, setEditingAssetName] = useState('');
+
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
   
@@ -54,9 +59,6 @@ const App: React.FC = () => {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const storyContentRef = useRef<HTMLDivElement>(null);
-  const progressIntervalRef = useRef<number | null>(null);
-  const startTimeRef = useRef<number>(0);
-  const progressRef = useRef<number>(0);
 
   const showAlert = (title: string, message: string) => {
     setAlertModal({ isOpen: true, title, message });
@@ -73,69 +75,6 @@ const App: React.FC = () => {
     confirmModal.onConfirm();
     closeConfirm();
   };
-
-
-  const updateProgress = useCallback(() => {
-    const elapsed = (Date.now() - startTimeRef.current) / 1000; // in seconds
-    let currentProgress = 0;
-    if (elapsed < 60) {
-      // Non-linear progress from 0 to 80 in the first 60 seconds (cubic ease-out)
-      currentProgress = 80 * (1 - Math.pow(1 - elapsed / 60, 3));
-    } else if (elapsed < 120) {
-      // Non-linear progress from 80 to 95 in the next 60 seconds
-      currentProgress = 80 + 15 * (1 - Math.pow(1 - (elapsed - 60) / 60, 3));
-    } else {
-      // Hold at 95 after 2 minutes
-      currentProgress = 95;
-    }
-    const finalProgress = Math.min(95, Math.floor(currentProgress));
-    setProgress(finalProgress);
-    progressRef.current = finalProgress;
-  }, []);
-
-  const startProgressIndicator = useCallback((taskIdentifier: string) => {
-    if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
-    setActiveProgressTask(taskIdentifier);
-    setProgress(0);
-    setProgressMessage('正在初始化...');
-    progressRef.current = 0;
-    startTimeRef.current = Date.now();
-    progressIntervalRef.current = window.setInterval(updateProgress, 200);
-  }, [updateProgress]);
-
-  const stopProgressIndicator = useCallback((onComplete: () => void) => {
-    if (progressIntervalRef.current) {
-        clearInterval(progressIntervalRef.current);
-        progressIntervalRef.current = null;
-    }
-    
-    const startProgress = progressRef.current;
-    const duration = 1000; // 1 second
-    const startTime = Date.now();
-
-    const animationInterval = window.setInterval(() => {
-        const elapsed = Date.now() - startTime;
-        if (elapsed >= duration) {
-            clearInterval(animationInterval);
-            progressIntervalRef.current = null;
-            setProgress(100);
-            progressRef.current = 100;
-            setTimeout(() => {
-                onComplete();
-                setActiveProgressTask(null);
-                setProgress(0); 
-                setProgressMessage('');
-                progressRef.current = 0;
-            }, 500); // Show 100% for a moment before disappearing.
-        } else {
-            // Linear interpolation for smooth animation to 100%
-            const newProgress = Math.round(startProgress + (100 - startProgress) * (elapsed / duration));
-            setProgress(newProgress);
-            progressRef.current = newProgress;
-        }
-    }, 16); // ~60fps
-    progressIntervalRef.current = animationInterval;
-  }, []);
 
   useEffect(() => {
     const root = window.document.documentElement;
@@ -193,7 +132,7 @@ const App: React.FC = () => {
             showAlert("操作受限", "目前只支持添加一个作品节点。");
             return;
         }
-        newNode.data = { title: '导入作品', content: '', mode: 'rewrite' } as WorkNodeData;
+        newNode.data = { title: data?.title || '导入作品', content: data?.content || '', mode: 'rewrite' } as WorkNodeData;
         break;
     }
 
@@ -330,205 +269,136 @@ const App: React.FC = () => {
   }, [nodes, edges]);
 
 
+  const processAiGeneratedGraph = (result: any, sourceNodePosition: { x: number; y: number }) => {
+    const createdNodes: Node[] = [];
+    const createdEdges: Edge[] = [];
+
+    // Create Character Nodes
+    (result.characters || []).forEach((char: any, index: number) => {
+        const charFields: KeyValueField[] = (char.fields || []).map((f: any, i: number) => ({ id: `cf_${index}_${i}`, key: f.key, value: f.value }));
+        createdNodes.push({
+            id: `CHAR_ai_${Date.now()}_${index}`, type: NodeType.CHARACTER,
+            position: { x: sourceNodePosition.x - 400, y: sourceNodePosition.y + index * 180 },
+            data: { title: char.title, fields: charFields }, isCollapsed: false,
+        });
+    });
+
+    // Create Setting Nodes
+    (result.settings || []).forEach((setting: any, index: number) => {
+        const settingFields: KeyValueField[] = (setting.fields || []).map((f: any, i: number) => ({ id: `sf_${index}_${i}`, key: f.key, value: f.value }));
+        createdNodes.push({
+            id: `SETTING_ai_${Date.now()}_${index}`, type: NodeType.SETTING,
+            position: { x: sourceNodePosition.x, y: sourceNodePosition.y - 250 - (index * 200) },
+            data: { title: setting.title, fields: settingFields, narrativeStructure: 'single' }, isCollapsed: false,
+        });
+    });
+
+    // Create Environment Nodes
+    (result.environments || []).forEach((env: any, index: number) => {
+        const envFields: KeyValueField[] = (env.fields || []).map((f: any, i: number) => ({ id: `ef_${index}_${i}`, key: f.key, value: f.value }));
+        createdNodes.push({
+            id: `ENV_ai_${Date.now()}_${index}`, type: NodeType.ENVIRONMENT,
+            position: { x: sourceNodePosition.x - 200, y: sourceNodePosition.y - 450 - (index * 200) },
+            data: { title: env.title, fields: envFields }, isCollapsed: false,
+        });
+    });
+
+    // Create Style Nodes
+    (result.styles || []).forEach((style: any, index: number) => {
+        const libraryStyle = style.id ? STORY_STYLES.find(s => s.id === style.id) : null;
+        createdNodes.push({
+            id: `STYLE_ai_${Date.now()}_${index}`, type: NodeType.STYLE,
+            position: { x: sourceNodePosition.x - 400, y: sourceNodePosition.y - 250 - (index * 150) },
+            data: {
+                styleId: style.id ?? -1, title: libraryStyle?.name || style.title,
+                description: libraryStyle?.description || style.description || '自定义风格',
+                applicationMethod: 'appropriate'
+            }, isCollapsed: false,
+        });
+    });
+
+    // Create Structure Nodes
+    if (result.structures?.start) {
+        const start = result.structures.start;
+        const libraryStart = start.id ? STORY_STRUCTURES.find(s => s.id === start.id) : null;
+        createdNodes.push({
+            id: `STRUCTURE_start_${Date.now()}`, type: NodeType.STRUCTURE,
+            position: {x: sourceNodePosition.x + 400, y: sourceNodePosition.y - 180 },
+            data: {
+                structureId: start.id ?? -1, title: libraryStart?.name || start.title,
+                description: libraryStart?.description || start.description || '',
+                category: StructureCategory.STARTING, userInput: start.userInput || ''
+            }, isCollapsed: false,
+        });
+    }
+    if (result.structures?.end) {
+        const end = result.structures.end;
+        const libraryEnd = end.id ? STORY_STRUCTURES.find(s => s.id === end.id) : null;
+        const totalPlots = (result.plots?.length || 0) + (result.plots_a?.length || 0); // Approx
+        createdNodes.push({
+            id: `STRUCTURE_end_${Date.now()}`, type: NodeType.STRUCTURE,
+            position: {x: sourceNodePosition.x + 400, y: sourceNodePosition.y + 180 + (totalPlots * 180) },
+            data: {
+                structureId: end.id ?? -1, title: libraryEnd?.name || end.title,
+                description: libraryEnd?.description || end.description || '',
+                category: StructureCategory.ENDING, userInput: end.userInput || ''
+            }, isCollapsed: false,
+        });
+    }
+
+    // Create Plot Nodes (for single and multi-line)
+    const processPlots = (plotList: any[], line: 'a' | 'b' | 'single', yOffsetStart: number, xOffset: number) => {
+        (plotList || []).forEach((plot: any, index: number) => {
+            const libraryPlot = plot.id ? STORY_PLOTS.find(p => p.id === plot.id) : null;
+            createdNodes.push({
+                id: `PLOT_ai_${line}_${Date.now()}_${index}`, type: NodeType.PLOT,
+                position: { x: sourceNodePosition.x + xOffset, y: yOffsetStart + index * 180 },
+                data: {
+                    plotId: plot.id ?? -1, title: libraryPlot?.name || plot.title,
+                    description: libraryPlot?.description || plot.description || '自定义情节',
+                    userInput: plot.userInput || ''
+                }, isCollapsed: false,
+            });
+        });
+    };
+    processPlots(result.plots, 'single', sourceNodePosition.y, 400);
+    processPlots(result.plots_a, 'a', sourceNodePosition.y, 400);
+    processPlots(result.plots_b, 'b', sourceNodePosition.y + 350, 400);
+
+
+    // Create Connections
+    const allPossibleNodes = [...nodes, ...createdNodes];
+    (result.connections || []).forEach((conn: { sourceTitle: string, targetTitle: string, sourceHandle?: string, targetHandle?: string }) => {
+        const source = allPossibleNodes.find(n => (n.data as any).title === conn.sourceTitle);
+        const target = allPossibleNodes.find(n => (n.data as any).title === conn.targetTitle);
+        if (source && target) {
+            createdEdges.push({
+                id: `edge_ai_${source.id}_${target.id}_${Date.now()}`,
+                source: source.id,
+                target: target.id,
+                sourceHandle: conn.sourceHandle,
+                targetHandle: conn.targetHandle
+            });
+        }
+    });
+
+    setNodes(prev => [...prev, ...createdNodes]);
+    setEdges(prev => [...prev, ...createdEdges]);
+  }
+
   const handleAnalyzeWork = async (nodeId: string, content: string) => {
-    startProgressIndicator(`analyze_${nodeId}`);
+    startProgress(`analyze_${nodeId}`);
     try {
         const result = await analyzeWork(content, nodes, model);
         const sourceNode = nodes.find(n => n.id === nodeId);
         if (!sourceNode) return;
 
-        const createdNodes: Node[] = [];
-        const createdEdges: Edge[] = [];
-
-        // Create Character Nodes
-        const characterNodes: Node<CharacterNodeData>[] = (result.characters || []).map((char: any, index: number) => {
-            const charFields: KeyValueField[] = (char.fields || []).map((f: any, i: number) => ({ id: `cf_${index}_${i}`, key: f.key, value: f.value }));
-            return {
-                id: `CHAR_analyzed_${Date.now()}_${index}`,
-                type: NodeType.CHARACTER,
-                position: { x: sourceNode.position.x - 400, y: sourceNode.position.y + index * 180 },
-                data: { title: char.title, fields: charFields },
-                isCollapsed: false,
-            };
-        });
-        createdNodes.push(...characterNodes);
-
-        // Create Setting Nodes
-        const settingNodes: Node<SettingNodeData>[] = (result.settings || []).map((setting: any, index: number) => {
-             const settingFields: KeyValueField[] = (setting.fields || []).map((f: any, i: number) => ({ id: `sf_${index}_${i}`, key: f.key, value: f.value }));
-            return {
-                id: `SETTING_analyzed_${Date.now()}_${index}`,
-                type: NodeType.SETTING,
-                position: { x: sourceNode.position.x, y: sourceNode.position.y - 250 - (index * 200) },
-                data: { title: setting.title, fields: settingFields, narrativeStructure: 'single' },
-                isCollapsed: false,
-            };
-        });
-        createdNodes.push(...settingNodes);
-        
-        // Create Environment Nodes
-        const environmentNodes: Node<EnvironmentNodeData>[] = (result.environments || []).map((env: any, index: number) => {
-             const envFields: KeyValueField[] = (env.fields || []).map((f: any, i: number) => ({ id: `ef_${index}_${i}`, key: f.key, value: f.value }));
-            return {
-                id: `ENV_analyzed_${Date.now()}_${index}`,
-                type: NodeType.ENVIRONMENT,
-                position: { x: sourceNode.position.x - 200, y: sourceNode.position.y - 450 - (index * 200) },
-                data: { title: env.title, fields: envFields },
-                isCollapsed: false,
-            };
-        });
-        createdNodes.push(...environmentNodes);
-        
-        // Create Style Nodes
-        const styleNodes = (result.styles || []).map((style: any, index: number) => {
-            const libraryStyle = style.id ? STORY_STYLES.find(s => s.id === style.id) : null;
-            const styleNode: Node<StyleNodeData> = {
-                id: `STYLE_analyzed_${Date.now()}_${index}`,
-                type: NodeType.STYLE,
-                position: { x: sourceNode.position.x - 400, y: sourceNode.position.y - 250 - (index * 150) },
-                data: {
-                    styleId: style.id ?? -1,
-                    title: libraryStyle?.name || style.title,
-                    description: libraryStyle?.description || style.description || '自定义风格',
-                    applicationMethod: 'appropriate'
-                },
-                isCollapsed: false,
-            };
-            return styleNode;
-        });
-        createdNodes.push(...styleNodes);
-        
-        // Connect style nodes to the first setting node
-        if (settingNodes.length > 0) {
-            const mainSettingNodeId = settingNodes[0].id;
-            styleNodes.forEach(styleNode => {
-                createdEdges.push({
-                    id: `edge_style_${styleNode.id}_${mainSettingNodeId}`,
-                    source: styleNode.id,
-                    target: mainSettingNodeId,
-                    targetHandle: 'style'
-                });
-            });
-        }
-
-        // Create Structure Nodes
-        const structureNodes: Node<StructureNodeData>[] = [];
-        if (result.structures?.start) {
-            const start = result.structures.start;
-            const libraryStart = start.id ? STORY_STRUCTURES.find(s => s.id === start.id) : null;
-            const startNode: Node<StructureNodeData> = {
-                id: `STRUCTURE_start_${Date.now()}`,
-                type: NodeType.STRUCTURE,
-                position: {x: sourceNode.position.x + 400, y: sourceNode.position.y - 180 },
-                data: {
-                    structureId: start.id ?? -1,
-                    title: libraryStart?.name || start.title,
-                    description: libraryStart?.description || start.description || '',
-                    category: StructureCategory.STARTING,
-                    userInput: start.userInput || ''
-                },
-                isCollapsed: false,
-            };
-            createdNodes.push(startNode);
-            structureNodes.push(startNode);
-        }
-         if (result.structures?.end) {
-            const end = result.structures.end;
-            const libraryEnd = end.id ? STORY_STRUCTURES.find(s => s.id === end.id) : null;
-            const endNode: Node<StructureNodeData> = {
-                id: `STRUCTURE_end_${Date.now()}`,
-                type: NodeType.STRUCTURE,
-                position: {x: sourceNode.position.x + 400, y: sourceNode.position.y + 350 + (result.plots.length * 180) },
-                data: {
-                    structureId: end.id ?? -1,
-                    title: libraryEnd?.name || end.title,
-                    description: libraryEnd?.description || end.description || '',
-                    category: StructureCategory.ENDING,
-                    userInput: end.userInput || ''
-                },
-                isCollapsed: false,
-            };
-            createdNodes.push(endNode);
-            structureNodes.push(endNode);
-        }
-
-
-        // Create Plot Nodes
-        let yOffset = sourceNode.position.y;
-        const plotNodes: Node<PlotNodeData>[] = (result.plots || []).map((plot: any, index: number) => {
-            const libraryPlot = plot.id ? STORY_PLOTS.find(p => p.id === plot.id) : null;
-            const plotNode: Node<PlotNodeData> = {
-                id: `PLOT_analyzed_${Date.now()}_${index}`,
-                type: NodeType.PLOT,
-                position: { x: sourceNode.position.x + 400, y: yOffset },
-                data: { 
-                    plotId: plot.id ?? -1,
-                    title: libraryPlot?.name || plot.title,
-                    description: libraryPlot?.description || plot.description || '自定义情节',
-                    userInput: plot.userInput || '' 
-                },
-                isCollapsed: false,
-            };
-            yOffset += 180;
-            return plotNode;
-        });
-        createdNodes.push(...plotNodes);
-        
-        // --- Start of Edge Creation Logic ---
-
-        // 1. Create the main plot flow: Work -> Start -> Plot(s) -> End
-        let lastNodeInFlow: string = nodeId; // The chain starts from the source Work Node.
-
-        const startNode = structureNodes.find(n => n.data.category === StructureCategory.STARTING);
-        if (startNode) {
-            createdEdges.push({
-                id: `edge_analyzed_work_to_start_${Date.now()}`,
-                source: lastNodeInFlow,
-                target: startNode.id,
-            });
-            lastNodeInFlow = startNode.id; // The chain now continues from the start node.
-        }
-
-        plotNodes.forEach(plotNode => {
-            createdEdges.push({
-                id: `edge_analyzed_flow_${lastNodeInFlow}_${plotNode.id}`,
-                source: lastNodeInFlow,
-                target: plotNode.id,
-            });
-            lastNodeInFlow = plotNode.id;
-        });
-
-        const endNode = structureNodes.find(n => n.data.category === StructureCategory.ENDING);
-        if (endNode) {
-            createdEdges.push({
-                id: `edge_analyzed_flow_${lastNodeInFlow}_${endNode.id}`,
-                source: lastNodeInFlow,
-                target: endNode.id,
-            });
-        }
-
-        // 2. Connect side nodes (Character, Setting, Environment) to the main flow.
-        // They will connect to the first plot node, or the start node if no plots exist.
-        const connectTargetId = plotNodes.length > 0 ? plotNodes[0].id : startNode?.id;
-        if (connectTargetId) {
-            const nodesToConnect = [...characterNodes, ...settingNodes, ...environmentNodes];
-            nodesToConnect.forEach(nodeToConnect => {
-                createdEdges.push({
-                    id: `edge_analyzed_side_${nodeToConnect.id}_${connectTargetId}_${Date.now()}`,
-                    source: nodeToConnect.id,
-                    target: connectTargetId,
-                    targetHandle: 'flow'
-                });
-            });
-        }
-        
-        stopProgressIndicator(() => {
-            setNodes(prev => [...prev, ...createdNodes]);
-            setEdges(prev => [...prev, ...createdEdges]);
+        stopProgress(() => {
+            processAiGeneratedGraph(result, sourceNode.position);
         });
 
     } catch (error) {
-        stopProgressIndicator(() => {
+        stopProgress(() => {
             console.error(error);
             showAlert("解析失败", error instanceof Error ? error.message : '发生未知错误');
         });
@@ -536,143 +406,21 @@ const App: React.FC = () => {
   };
 
   const handleExpandSetting = async (nodeId: string) => {
-    startProgressIndicator(`expand_${nodeId}`);
+    startProgress(`expand_${nodeId}`);
     try {
         const sourceNode = nodes.find(n => n.id === nodeId) as Node<SettingNodeData>;
         if (!sourceNode) {
-            stopProgressIndicator(() => {});
+            stopProgress(() => {});
             return;
         };
         
         const result = await expandSetting(sourceNode.data, nodes, model);
         
-        const createdNodes: Node[] = [];
-        const createdEdges: Edge[] = [];
-
-        // Create Character Nodes
-        (result.characters || []).forEach((char: any, index: number) => {
-            const charFields: KeyValueField[] = (char.fields || []).map((f: any, i: number) => ({ id: `cf_exp_${index}_${i}`, key: f.key, value: f.value }));
-            createdNodes.push({
-                id: `CHAR_expanded_${Date.now()}_${index}`, type: NodeType.CHARACTER,
-                position: { x: sourceNode.position.x - 400, y: sourceNode.position.y + index * 180 },
-                data: { title: char.title, fields: charFields },
-                isCollapsed: false,
-            });
-        });
-
-        // Create Environment Nodes
-        (result.environments || []).forEach((env: any, index: number) => {
-             const envFields: KeyValueField[] = (env.fields || []).map((f: any, i: number) => ({ id: `ef_exp_${index}_${i}`, key: f.key, value: f.value }));
-            createdNodes.push({
-                id: `ENV_expanded_${Date.now()}_${index}`, type: NodeType.ENVIRONMENT,
-                position: { x: sourceNode.position.x, y: sourceNode.position.y + 250 + (index * 200) },
-                data: { title: env.title, fields: envFields },
-                isCollapsed: false,
-            });
-        });
-
-        // Create Plot Nodes
-        (result.plots || []).forEach((plot: { id: number }, index: number) => {
-             const libraryPlot = STORY_PLOTS.find(p => p.id === plot.id);
-             if (libraryPlot) {
-                createdNodes.push({
-                    id: `PLOT_expanded_${Date.now()}_${index}`, type: NodeType.PLOT,
-                    position: { x: sourceNode.position.x + 400, y: sourceNode.position.y + index * 180 },
-                    data: { 
-                        plotId: libraryPlot.id,
-                        title: libraryPlot.name,
-                        description: libraryPlot.description,
-                        userInput: '' 
-                    },
-                    isCollapsed: false,
-                });
-             }
-        });
-
-        // Create Style Nodes
-        (result.styles || []).forEach((style: { id: number }, index: number) => {
-            const libraryStyle = STORY_STYLES.find(s => s.id === style.id);
-            if (libraryStyle) {
-                const styleNode: Node<StyleNodeData> = {
-                    id: `STYLE_expanded_${Date.now()}_${index}`,
-                    type: NodeType.STYLE,
-                    position: { x: sourceNode.position.x - 400, y: sourceNode.position.y - 250 - index * 150 },
-                    data: {
-                        styleId: libraryStyle.id,
-                        title: libraryStyle.name,
-                        description: libraryStyle.description,
-                        applicationMethod: 'appropriate'
-                    },
-                    isCollapsed: false,
-                };
-                createdNodes.push(styleNode);
-                createdEdges.push({
-                    id: `edge_expanded_style_${styleNode.id}_${sourceNode.id}`,
-                    source: styleNode.id,
-                    target: sourceNode.id,
-                    targetHandle: 'style'
-                });
-            }
-        });
-
-        // Create Structure Nodes
-        if (result.structures?.start?.id) {
-            const libraryStart = STORY_STRUCTURES.find(s => s.id === result.structures.start.id);
-            if (libraryStart) {
-                createdNodes.push({
-                    id: `STRUCTURE_start_expanded_${Date.now()}`,
-                    type: NodeType.STRUCTURE,
-                    position: { x: sourceNode.position.x + 400, y: sourceNode.position.y - 180 },
-                    data: {
-                        structureId: libraryStart.id,
-                        title: libraryStart.name,
-                        description: libraryStart.description,
-                        category: StructureCategory.STARTING,
-                        userInput: ''
-                    },
-                    isCollapsed: false,
-                });
-            }
-        }
-        if (result.structures?.end?.id) {
-            const libraryEnd = STORY_STRUCTURES.find(s => s.id === result.structures.end.id);
-            if (libraryEnd) {
-                createdNodes.push({
-                    id: `STRUCTURE_end_expanded_${Date.now()}`,
-                    type: NodeType.STRUCTURE,
-                    position: { x: sourceNode.position.x + 400, y: sourceNode.position.y + 350 + ((result.plots?.length || 0) * 180) },
-                    data: {
-                        structureId: libraryEnd.id,
-                        title: libraryEnd.name,
-                        description: libraryEnd.description,
-                        category: StructureCategory.ENDING,
-                        userInput: ''
-                    },
-                    isCollapsed: false,
-                });
-            }
-        }
-
-        // Create Connections
-        const allPossibleNodes = [...nodes, ...createdNodes];
-        (result.connections || []).forEach((conn: {sourceTitle: string, targetTitle: string}) => {
-            const source = allPossibleNodes.find(n => (n.data as any).title === conn.sourceTitle);
-            const target = allPossibleNodes.find(n => (n.data as any).title === conn.targetTitle);
-            if (source && target && target.type !== NodeType.STYLE) {
-                 createdEdges.push({
-                    id: `edge_expanded_${source.id}_${target.id}_${Date.now()}`,
-                    source: source.id,
-                    target: target.id,
-                });
-            }
-        });
-
-        stopProgressIndicator(() => {
-            setNodes(prev => [...prev, ...createdNodes]);
-            setEdges(prev => [...prev, ...createdEdges]);
+        stopProgress(() => {
+            processAiGeneratedGraph(result, sourceNode.position);
         });
     } catch (error) {
-        stopProgressIndicator(() => {
+        stopProgress(() => {
             console.error(error);
             showAlert("扩展失败", error instanceof Error ? error.message : '发生未知错误');
         });
@@ -680,121 +428,181 @@ const App: React.FC = () => {
   };
 
   const handleGenerateOutline = async () => {
-    startProgressIndicator('outline');
+    startProgress('outline', '正在生成大纲...');
     try {
         const wordCount = targetWordCount ? parseInt(targetWordCount, 10) : undefined;
-        if (wordCount && isNaN(wordCount)) {
-            showAlert("输入无效", "目标字数必须是一个数字。");
-            stopProgressIndicator(() => {});
+        if (targetWordCount && (isNaN(wordCount) || wordCount < 0)) {
+            showAlert("输入无效", "目标字数必须是一个有效的正数。");
+            stopProgress();
             return;
         }
         const result = await generateOutline(nodes, edges, language, model, wordCount);
-        stopProgressIndicator(() => {
+        stopProgress(() => {
             setOutline(result);
             setAssetLibrary(prev => [...prev, { type: 'outline', content: result, title: `大纲: ${result.title}`, timestamp: new Date() }]);
             setModalContent('outline');
         });
     } catch (err) {
-        stopProgressIndicator(() => {
+        stopProgress(() => {
             showAlert("生成大纲失败", `${err instanceof Error ? err.message : '未知错误'}`);
         });
     }
   };
 
-  const handleGenerateStory = async () => {
-    if (!outline || !outline.segments || outline.segments.length === 0) {
-        showAlert("无法生成", "请先生成一个有效的故事大纲。");
-        return;
-    }
-
-    setModalContent(null); // Close outline modal
-    
-    const isShortForm = outline.segments.length > 0 && outline.segments[0].key_events && !outline.segments[0].chapters;
-
-    if (isShortForm) {
-        // --- Short Story Generation ---
-        startProgressIndicator('story');
-        setProgressMessage('正在创作短篇故事...');
-        try {
-            const finalStory = await generateShortStory(nodes, edges, outline, language, model);
-            stopProgressIndicator(() => {
-                setStory(finalStory);
-                setAssetLibrary(prev => [...prev, { type: 'story', content: finalStory, title: `故事: ${outline.title}`, timestamp: new Date() }]);
-                setModalContent('story');
-            });
-        } catch (err) {
-            stopProgressIndicator(() => {
-                showAlert("故事创作失败", `${err instanceof Error ? err.message : '未知错误'}`);
-            });
+  const handleGenerateStoryFromOutline = async () => {
+        if (!outline || !outline.segments || outline.segments.length === 0) {
+            showAlert("无法生成", "请先生成一个有效的故事大纲。");
+            return;
         }
-    } else {
-        // --- Long Story (Chapter-based) Generation ---
-        setActiveProgressTask('story');
-        setProgress(0);
-        setProgressMessage('正在准备创作...');
 
-        let accumulatedStory = "";
-        const storyParts: string[] = [];
-        const totalChapters = outline.segments.reduce((acc, s) => acc + (s.chapters?.length || 0), 0);
-        let chaptersDone = 0;
+        setModalContent(null); // Close outline modal
+        
+        const isShortForm = outline.segments.length > 0 && outline.segments[0].key_events && !outline.segments[0].chapters;
 
-        try {
-            for (let i = 0; i < outline.segments.length; i++) {
-                const segment = outline.segments[i];
-                if (!segment.chapters) continue;
-
-                for (let j = 0; j < segment.chapters.length; j++) {
-                    chaptersDone++;
-                    const progressPercentage = Math.floor(((chaptersDone -1) / totalChapters) * 100);
-                    setProgress(progressPercentage);
-                    setProgressMessage(`正在创作第 ${chaptersDone} / ${totalChapters} 章...`);
-
-                    const newChapterText = await generateStoryChapter(
-                        nodes,
-                        edges,
-                        outline,
-                        accumulatedStory,
-                        i,
-                        j,
-                        language,
-                        model
-                    );
-                    
-                    storyParts.push(newChapterText);
-                    accumulatedStory += (accumulatedStory ? "\n\n" : "") + newChapterText;
-                }
+        if (isShortForm) {
+            startProgress('story', '正在创作短篇故事...');
+            try {
+                const finalStory = await generateShortStory(nodes, edges, outline, language, model);
+                stopProgress(() => {
+                    setStory(finalStory);
+                    setAssetLibrary(prev => [...prev, { type: 'story', content: finalStory, title: `故事: ${outline.title}`, timestamp: new Date() }]);
+                    setModalContent('story');
+                });
+            } catch (err) {
+                stopProgress(() => {
+                    showAlert("故事创作失败", `${err instanceof Error ? err.message : '未知错误'}`);
+                });
             }
+        } else {
+            // --- Long Story (Chapter-based) Generation ---
+            startProgress('story', '正在准备创作...');
+            let accumulatedStory = "";
+            const storyParts: string[] = [];
+            const totalChapters = outline.segments.reduce((acc, s) => acc + (s.chapters?.length || 0), 0);
+            let chaptersDone = 0;
 
-            setProgress(100);
-            setProgressMessage('创作完成！');
-            const finalStory = storyParts.join('\n\n');
-            setStory(finalStory);
-            setAssetLibrary(prev => [...prev, { type: 'story', content: finalStory, title: `故事: ${outline.title}`, timestamp: new Date() }]);
-            
-            setTimeout(() => {
-                setModalContent('story');
-                setActiveProgressTask(null);
-                setProgress(0);
-                setProgressMessage('');
-            }, 500);
+            try {
+                for (let i = 0; i < outline.segments.length; i++) {
+                    const segment = outline.segments[i];
+                    if (!segment.chapters) continue;
 
-        } catch (err) {
-            showAlert("故事创作失败", `在创作第 ${chaptersDone} 章时出错: ${err instanceof Error ? err.message : '未知错误'}`);
-            setActiveProgressTask(null);
-            setProgress(0);
-            setProgressMessage('');
+                    for (let j = 0; j < segment.chapters.length; j++) {
+                        chaptersDone++;
+                        setProgressMessage(`正在创作第 ${chaptersDone} / ${totalChapters} 章...`);
+                        
+                        const newChapterText = await generateStoryChapter(
+                            nodes, edges, outline, accumulatedStory, i, j, language, model
+                        );
+                        
+                        storyParts.push(newChapterText);
+                        accumulatedStory += (accumulatedStory ? "\n\n" : "") + newChapterText;
+                    }
+                }
+                
+                stopProgress(() => {
+                    const finalStory = storyParts.join('\n\n');
+                    setStory(finalStory);
+                    setAssetLibrary(prev => [...prev, { type: 'story', content: finalStory, title: `故事: ${outline.title}`, timestamp: new Date() }]);
+                    setModalContent('story');
+                });
+
+            } catch (err) {
+                stopProgress(() => {
+                    showAlert("故事创作失败", `在创作第 ${chaptersDone} 章时出错: ${err instanceof Error ? err.message : '未知错误'}`);
+                });
+            }
         }
+  }
+
+  const handleGenerateStoryDirectly = async () => {
+    startProgress('story', '正在构思大纲...');
+    try {
+        const wordCount = parseInt(targetWordCount, 10);
+        // Step 1: Generate a temporary short-story outline
+        const tempOutline = await generateOutline(nodes, edges, language, model, wordCount);
+        setOutline(tempOutline); // Set outline for title and asset saving
+        setProgressMessage('正在创作故事...');
+        
+        // Step 2: Generate the story from the temporary outline
+        const finalStory = await generateShortStory(nodes, edges, tempOutline, language, model);
+
+        stopProgress(() => {
+            setStory(finalStory);
+            setAssetLibrary(prev => [...prev, { type: 'outline', content: tempOutline, title: `大纲: ${tempOutline.title}`, timestamp: new Date() }]);
+            setAssetLibrary(prev => [...prev, { type: 'story', content: finalStory, title: `故事: ${tempOutline.title}`, timestamp: new Date() }]);
+            setModalContent('story');
+        });
+    } catch (err) {
+        stopProgress(() => {
+            showAlert("故事创作失败", `${err instanceof Error ? err.message : '未知错误'}`);
+        });
+    }
+  }
+
+  const handleGenerateStory = () => {
+    const targetWordCountInt = parseInt(targetWordCount, 10);
+    const canGenerateStoryDirectly = !isNaN(targetWordCountInt) && targetWordCountInt > 0 && targetWordCountInt <= 2000;
+
+    if (outline) {
+        handleGenerateStoryFromOutline();
+    } else if (canGenerateStoryDirectly) {
+        handleGenerateStoryDirectly();
+    } else {
+        showAlert("无法生成", "请先生成一个故事大纲，或设定一个低于2000的目标字数以直接生成短篇故事。");
     }
   };
 
+    const handleRevise = async () => {
+        if (modalContent === 'outline') await handleReviseOutline();
+        if (modalContent === 'story') await handleReviseStory();
+    };
 
-  const handleCopy = (content: string) => {
-    navigator.clipboard.writeText(content).then(() => {
-        showAlert('复制成功', '已复制到剪贴板！');
-    }, (err) => {
+    const handleReviseOutline = async () => {
+        if (!outline || !revisionPrompt.trim()) return;
+        startProgress('revise_outline', '正在修改大纲...');
+        try {
+            const revisedOutline = await reviseOutline(outline, revisionPrompt, language, model);
+            stopProgress(() => {
+                setOutline(revisedOutline);
+                setAssetLibrary(prev => prev.map(asset => asset.content === outline ? { ...asset, content: revisedOutline, title: `大纲: ${revisedOutline.title}` } : asset));
+                setRevisionPrompt('');
+            });
+        } catch (err) {
+            stopProgress(() => {
+                showAlert("修改大纲失败", `${err instanceof Error ? err.message : '未知错误'}`);
+            });
+        }
+    };
+
+    const handleReviseStory = async () => {
+        if (!story || !revisionPrompt.trim()) return;
+        startProgress('revise_story', '正在修改故事...');
+        try {
+            const revisedStory = await reviseStory(story, revisionPrompt, language, model);
+            stopProgress(() => {
+                setStory(revisedStory);
+                setAssetLibrary(prev => prev.map(asset => asset.content === story ? { ...asset, content: revisedStory } : asset));
+                setRevisionPrompt('');
+            });
+        } catch (err) {
+            stopProgress(() => {
+                showAlert("修改故事失败", `${err instanceof Error ? err.message : '未知错误'}`);
+            });
+        }
+    };
+
+  const handleCopy = async (content: string) => {
+    if (!content) {
+        showAlert('复制失败', '没有可复制的内容。');
+        return;
+    }
+    try {
+        await navigator.clipboard.writeText(content);
+        showAlert('复制成功', '内容已复制到剪贴板！');
+    } catch (err) {
         console.error('无法复制文本: ', err);
-        showAlert('复制失败', '无法将内容复制到剪贴板。');
-    });
+        showAlert('复制失败', '无法将内容复制到剪贴板。请检查浏览器权限。');
+    }
   };
 
   const handleDownload = (content: string, filename: string) => {
@@ -816,7 +624,49 @@ const App: React.FC = () => {
     });
   };
 
-  const isAnyTaskRunning = !!activeProgressTask;
+  const handleWordCountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const val = e.target.value;
+      if (val === '' || (parseInt(val, 10) >= 0)) {
+          setTargetWordCount(val);
+      }
+  };
+
+  const adjustWordCount = (amount: number) => {
+      const current = parseInt(targetWordCount, 10) || 0;
+      const newValue = Math.max(0, current + amount);
+      setTargetWordCount(String(newValue));
+  };
+    
+    const handleDeleteAsset = (timestamp: Date) => {
+        showConfirm('删除资产', '您确定要删除这个项目吗？此操作无法撤销。', () => {
+            setAssetLibrary(prev => prev.filter(asset => asset.timestamp !== timestamp));
+        });
+    };
+
+    const handleStartRenameAsset = (asset: Asset) => {
+        setRenamingAssetId(asset.timestamp.toISOString());
+        setEditingAssetName(asset.title);
+    };
+
+    const handleConfirmRenameAsset = () => {
+        if (!renamingAssetId || !editingAssetName.trim()) return;
+        setAssetLibrary(prev => prev.map(asset => 
+            asset.timestamp.toISOString() === renamingAssetId 
+            ? { ...asset, title: editingAssetName.trim() } 
+            : asset
+        ));
+        setRenamingAssetId(null);
+    };
+
+    const handleCancelRenameAsset = () => {
+        setRenamingAssetId(null);
+    };
+    
+    const handleImportAssetAsNode = (asset: Asset) => {
+        const content = typeof asset.content === 'string' ? asset.content : JSON.stringify(asset.content, null, 2);
+        addNode(NodeType.WORK, { title: asset.title, content });
+        setIsAssetModalOpen(false);
+    };
 
   return (
     <div className="w-screen h-screen font-sans flex overflow-hidden">
@@ -856,7 +706,6 @@ const App: React.FC = () => {
           setTheme={setTheme}
         />
         
-        {/* Progress Card */}
         {isAnyTaskRunning && (activeProgressTask === 'outline' || activeProgressTask === 'story') && (
             <div className="absolute bottom-24 right-4 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm p-4 rounded-lg shadow-lg z-20 w-72 border border-gray-200 dark:border-gray-700 animate-fade-in-up">
                 <h4 className="font-semibold text-gray-800 dark:text-gray-200">{activeProgressTask === 'outline' ? '正在生成大纲...' : '正在创作故事...'}</h4>
@@ -868,55 +717,17 @@ const App: React.FC = () => {
             </div>
         )}
 
-        {/* Action Toolbar */}
-        <div className="absolute bottom-4 right-4 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm p-3 rounded-lg shadow-lg z-20 flex flex-wrap items-center gap-2 md:gap-4 border border-gray-200 dark:border-gray-700">
-             <button
-                onClick={() => setIsHelpModalOpen(true)}
-                className="p-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-300 rounded-lg hover:bg-cyan-500 hover:text-white dark:hover:bg-cyan-600 transition-colors flex items-center font-semibold"
-                title="帮助与示例"
-            >
-                <QuestionMarkCircleIcon className="h-5 w-5" />
-            </button>
-            <button
-                onClick={() => setIsAssetModalOpen(true)}
-                className="p-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-300 rounded-lg hover:bg-cyan-500 hover:text-white dark:hover:bg-cyan-600 transition-colors flex items-center font-semibold"
-                title="资产库"
-            >
-                <LibraryIcon className="h-5 w-5" />
-            </button>
-            
-            <div className="flex items-center space-x-2">
-                <label htmlFor="word-count-input" className="text-sm font-medium text-gray-600 dark:text-gray-300">目标字数:</label>
-                <input
-                    id="word-count-input"
-                    type="number"
-                    value={targetWordCount}
-                    onChange={(e) => setTargetWordCount(e.target.value)}
-                    placeholder="约 2000"
-                    className="bg-gray-200 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-sm rounded-lg focus:ring-cyan-500 focus:border-cyan-500 block w-24 p-2 transition-colors"
-                    disabled={isAnyTaskRunning}
-                    step="500"
-                />
-            </div>
-
-            <div className="h-6 w-px bg-gray-300 dark:bg-gray-600"></div>
-
-            <button
-                onClick={handleGenerateOutline}
-                disabled={isAnyTaskRunning}
-                className="px-4 py-2 bg-cyan-600 text-white font-semibold rounded-lg hover:bg-cyan-500 transition-colors disabled:bg-gray-400 dark:disabled:bg-gray-600 disabled:cursor-not-allowed flex items-center"
-            >
-                生成大纲
-            </button>
-
-            <button
-                onClick={handleGenerateStory}
-                disabled={isAnyTaskRunning || !outline}
-                className="px-4 py-2 bg-emerald-600 text-white font-semibold rounded-lg hover:bg-emerald-500 transition-colors disabled:bg-gray-400 dark:disabled:bg-gray-600 disabled:cursor-not-allowed flex items-center"
-            >
-                生成故事
-            </button>
-        </div>
+        <GenerationControls
+            isAnyTaskRunning={isAnyTaskRunning}
+            outline={outline}
+            targetWordCount={targetWordCount}
+            onWordCountChange={handleWordCountChange}
+            onAdjustWordCount={adjustWordCount}
+            onGenerateOutline={handleGenerateOutline}
+            onGenerateStory={handleGenerateStory}
+            onOpenHelp={() => setIsHelpModalOpen(true)}
+            onOpenAssets={() => setIsAssetModalOpen(true)}
+        />
 
         <input 
           type="file" 
@@ -929,121 +740,25 @@ const App: React.FC = () => {
 
       <HelpModal isOpen={isHelpModalOpen} onClose={() => setIsHelpModalOpen(false)} onLoadExample={handleLoadExample} />
 
-      <Modal isOpen={modalContent === 'outline' && !!outline} onClose={() => setModalContent(null)} title={`故事大纲: ${outline?.title || ''}`}>
-         <div className="w-full max-h-[70vh] bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-200 p-4 rounded-md border border-gray-200 dark:border-gray-700 overflow-y-auto">
-                <div className="space-y-6">
-                    {outline?.segments.map((segment, index) => (
-                        <div key={index} className="p-4 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
-                            <h3 className="text-xl font-bold text-cyan-600 dark:text-cyan-400 mb-3 border-b border-cyan-500/30 pb-2">
-                                {segment.chapters ? `第 ${index + 1} 部分: ` : ''}{segment.segment_title}
-                                <span className="text-sm font-normal text-gray-500 dark:text-gray-400 ml-3">(预计 {segment.estimated_word_count} 字)</span>
-                            </h3>
-                            <div className="space-y-4 pl-4">
-                                {segment.chapters ? (
-                                    segment.chapters.map(chapter => (
-                                        <div key={chapter.chapter_number}>
-                                            <h4 className="font-semibold text-gray-800 dark:text-gray-200">{`第 ${chapter.chapter_number} 章: ${chapter.chapter_title}`}</h4>
-                                            {(chapter.point_of_view || chapter.setting) && (
-                                                <p className="text-xs text-gray-500 dark:text-gray-400 italic mb-1">
-                                                {chapter.point_of_view && `视角: ${chapter.point_of_view}`}
-                                                {chapter.point_of_view && chapter.setting && ' | '}
-                                                {chapter.setting && `场景: ${chapter.setting}`}
-                                                </p>
-                                            )}
-                                            <ul className="list-disc list-inside text-gray-600 dark:text-gray-300 space-y-1 text-sm">
-                                                {chapter.key_events.map((event, eventIdx) => (
-                                                    <li key={eventIdx}>{event}</li>
-                                                ))}
-                                            </ul>
-                                        </div>
-                                    ))
-                                ) : segment.key_events ? (
-                                    <div>
-                                        <h4 className="font-semibold text-gray-800 dark:text-gray-200">关键情节</h4>
-                                        <ul className="list-disc list-inside text-gray-600 dark:text-gray-300 space-y-1 text-sm">
-                                            {segment.key_events.map((event, eventIdx) => (
-                                                <li key={eventIdx}>{event}</li>
-                                            ))}
-                                        </ul>
-                                    </div>
-                                ) : null}
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            </div>
-        <div className="mt-4 flex justify-between items-center">
-             <div>
-                <button
-                    onClick={() => handleCopy(JSON.stringify(outline, null, 2))}
-                    className="p-2 bg-gray-300 dark:bg-gray-600 text-gray-800 dark:text-white rounded-lg hover:bg-gray-400 dark:hover:bg-gray-500 transition-colors mr-2"
-                    title="复制大纲 (JSON)"
-                >
-                    <CopyIcon className="h-5 w-5"/>
-                </button>
-                <button
-                    onClick={() => handleDownload(JSON.stringify(outline, null, 2), `${outline?.title || 'story-outline'}`)}
-                    className="p-2 bg-gray-300 dark:bg-gray-600 text-gray-800 dark:text-white rounded-lg hover:bg-gray-400 dark:hover:bg-gray-500 transition-colors"
-                    title="下载大纲 (JSON)"
-                >
-                    <DownloadIcon className="h-5 w-5"/>
-                </button>
-            </div>
-            <button 
-                onClick={handleGenerateStory}
-                disabled={isAnyTaskRunning || !outline}
-                className="px-5 py-2 bg-emerald-600 text-white font-semibold rounded-lg hover:bg-emerald-500 transition-colors disabled:bg-gray-400 dark:disabled:bg-gray-600"
-            >
-                 {activeProgressTask === 'story' ? '生成中...' : '开始创作'}
-            </button>
-        </div>
-      </Modal>
-
-      <Modal isOpen={modalContent === 'story'} onClose={() => setModalContent(null)} title={`故事: ${outline?.title || ''}`}>
-        <div className="flex w-full max-h-[70vh]">
-            {storyHeadings.length > 0 && (
-                <nav className="w-64 flex-shrink-0 pr-4 border-r border-gray-200 dark:border-gray-700 overflow-y-auto">
-                    <p className="text-lg font-semibold mb-2 text-cyan-600 dark:text-cyan-400">目录</p>
-                    <ul className="space-y-1">
-                        {storyHeadings.map(h => (
-                            <li key={h.id} style={{ paddingLeft: `${(h.level - 1) * 1}rem`}}>
-                                <button 
-                                    onClick={() => handleTocClick(h.id)}
-                                    className="text-left text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors text-sm w-full truncate"
-                                    title={h.text}
-                                >
-                                    {h.text}
-                                </button>
-                            </li>
-                        ))}
-                    </ul>
-                </nav>
-            )}
-            <div 
-                ref={storyContentRef} 
-                className={`bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-200 rounded-md overflow-y-auto ${storyHeadings.length > 0 ? 'pl-4 flex-grow' : 'w-full'}`}
-                style={{ scrollBehavior: 'smooth' }}
-            >
-                <MarkdownRenderer content={story} onHeadingsParse={setStoryHeadings} />
-            </div>
-        </div>
-        <div className="mt-4 flex justify-end items-center space-x-2">
-            <button
-                onClick={() => handleCopy(story)}
-                className="p-2 bg-gray-300 dark:bg-gray-600 text-gray-800 dark:text-white rounded-lg hover:bg-gray-400 dark:hover:bg-gray-500 transition-colors"
-                title="复制"
-            >
-                <CopyIcon className="h-5 w-5"/>
-            </button>
-            <button
-                onClick={() => handleDownload(story, `故事-${outline?.title || 'story'}`)}
-                className="p-2 bg-gray-300 dark:bg-gray-600 text-gray-800 dark:text-white rounded-lg hover:bg-gray-400 dark:hover:bg-gray-500 transition-colors"
-                title="下载"
-            >
-                <DownloadIcon className="h-5 w-5"/>
-            </button>
-        </div>
-      </Modal>
+      <ResultModals
+        modalContent={modalContent}
+        outline={outline}
+        story={story}
+        storyHeadings={storyHeadings}
+        storyContentRef={storyContentRef}
+        isAnyTaskRunning={isAnyTaskRunning}
+        activeProgressTask={activeProgressTask}
+        revisionPrompt={revisionPrompt}
+        onRevisionPromptChange={setRevisionPrompt}
+        onRevise={handleRevise}
+        isRevising={activeProgressTask === 'revise_outline' || activeProgressTask === 'revise_story'}
+        onClose={() => setModalContent(null)}
+        onGenerateStory={handleGenerateStoryFromOutline}
+        onCopy={handleCopy}
+        onDownload={handleDownload}
+        onTocClick={handleTocClick}
+        onHeadingsParse={setStoryHeadings}
+      />
       
       <Modal isOpen={isAssetModalOpen} onClose={() => setIsAssetModalOpen(false)} title="资产库">
         <div className="w-full max-h-[70vh] bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-200 rounded-md overflow-y-auto">
@@ -1053,11 +768,52 @@ const App: React.FC = () => {
                 <ul className="divide-y divide-gray-200 dark:divide-gray-700">
                     {assetLibrary.slice().reverse().map((asset) => (
                         <li key={asset.timestamp.toISOString()} className="p-4 flex justify-between items-center hover:bg-gray-200 dark:hover:bg-gray-800 transition-colors">
-                            <div>
-                                <p className="font-semibold">{asset.title}</p>
-                                <p className="text-sm text-gray-500 dark:text-gray-400">{asset.type === 'outline' ? '大纲' : '故事'}</p>
+                            <div className="flex-grow">
+                                {renamingAssetId === asset.timestamp.toISOString() ? (
+                                    <div className="flex items-center space-x-2">
+                                        <input
+                                            type="text"
+                                            value={editingAssetName}
+                                            onChange={(e) => setEditingAssetName(e.target.value)}
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter') handleConfirmRenameAsset();
+                                                if (e.key === 'Escape') handleCancelRenameAsset();
+                                            }}
+                                            className="w-full bg-gray-200 dark:bg-gray-700 text-sm p-1 rounded focus:outline-none focus:ring-2 focus:ring-cyan-500 transition-colors"
+                                            autoFocus
+                                        />
+                                        <button onClick={handleConfirmRenameAsset} className="p-1 text-green-500 hover:text-green-400"><CheckIcon className="h-5 w-5"/></button>
+                                        <button onClick={handleCancelRenameAsset} className="p-1 text-red-500 hover:text-red-400"><XIcon className="h-5 w-5"/></button>
+                                    </div>
+                                ) : (
+                                    <>
+                                        <p className="font-semibold">{asset.title}</p>
+                                        <p className="text-sm text-gray-500 dark:text-gray-400">{asset.type === 'outline' ? '大纲' : '故事'}</p>
+                                    </>
+                                )}
                             </div>
-                            <div className="flex items-center space-x-2">
+                            <div className="flex items-center space-x-2 flex-shrink-0 ml-4">
+                                <button
+                                    onClick={() => handleImportAssetAsNode(asset)}
+                                    className="p-2 bg-gray-300 dark:bg-gray-600 text-gray-800 dark:text-white rounded-lg hover:bg-gray-400 dark:hover:bg-gray-500 transition-colors"
+                                    title="导入为作品节点"
+                                >
+                                    <DocumentAddIcon className="h-5 w-5"/>
+                                </button>
+                                <button
+                                    onClick={() => handleStartRenameAsset(asset)}
+                                    className="p-2 bg-gray-300 dark:bg-gray-600 text-gray-800 dark:text-white rounded-lg hover:bg-gray-400 dark:hover:bg-gray-500 transition-colors"
+                                    title="重命名"
+                                >
+                                    <PencilIcon className="h-5 w-5"/>
+                                </button>
+                                 <button
+                                    onClick={() => handleDeleteAsset(asset.timestamp)}
+                                    className="p-2 bg-gray-300 dark:bg-gray-600 text-red-500 rounded-lg hover:bg-red-500 hover:text-white transition-colors"
+                                    title="删除"
+                                >
+                                    <TrashIcon className="h-5 w-5"/>
+                                </button>
                                 <button
                                     onClick={() => {
                                         if (asset.type === 'outline') {
@@ -1069,19 +825,9 @@ const App: React.FC = () => {
                                         }
                                         setIsAssetModalOpen(false);
                                     }}
-                                    className="px-3 py-1 bg-cyan-600 text-white text-sm font-semibold rounded-lg hover:bg-cyan-500 transition-colors"
+                                    className="px-3 py-2 bg-cyan-600 text-white text-sm font-semibold rounded-lg hover:bg-cyan-500 transition-colors"
                                 >
                                     预览
-                                </button>
-                                <button
-                                    onClick={() => {
-                                        const content = typeof asset.content === 'string' ? asset.content : JSON.stringify(asset.content, null, 2);
-                                        handleDownload(content, asset.title);
-                                    }}
-                                    className="p-2 bg-gray-300 dark:bg-gray-600 text-gray-800 dark:text-white rounded-lg hover:bg-gray-400 dark:hover:bg-gray-500 transition-colors"
-                                    title="下载"
-                                >
-                                    <DownloadIcon className="h-5 w-5"/>
                                 </button>
                             </div>
                         </li>
