@@ -5,7 +5,7 @@ import { STORY_PLOTS, STORY_STYLES, STORY_STRUCTURES } from '../constants';
 export function serializeGraph(nodes: Node[], edges: Edge[]): string {
   let serialized = "";
 
-  const workNode = nodes.find(n => n.type === NodeType.WORK) as Node<WorkNodeData> | undefined;
+  const workNodes = nodes.filter(n => n.type === NodeType.WORK) as Node<WorkNodeData>[];
   const characters = nodes.filter(n => n.type === NodeType.CHARACTER) as Node<CharacterNodeData>[];
   const settings = nodes.filter(n => n.type === NodeType.SETTING) as Node<SettingNodeData>[];
   const environments = nodes.filter(n => n.type === NodeType.ENVIRONMENT) as Node<EnvironmentNodeData>[];
@@ -14,25 +14,28 @@ export function serializeGraph(nodes: Node[], edges: Edge[]): string {
   const startNode = structures.find(s => s.data.category === StructureCategory.STARTING);
   const endNode = structures.find(s => s.data.category === StructureCategory.ENDING);
   
-  if (workNode) {
-      if (workNode.data.mode === 'parody') {
-        const levelMap = {
-            'reference': '参考 (仅参考文风，内容需完全不同)',
-            'imitation': '模仿 (模仿原文风格和结构，创作新内容)',
-            '套作': '套作 (严格模仿原文结构和句式，替换核心元素)',
-        };
-        const levelText = levelMap[workNode.data.parodyLevel || 'reference'];
-        serialized += `**写作风格仿写目标 (程度: ${levelText}):**\n`;
-        serialized += "```\n";
-        serialized += `${workNode.data.content}\n`;
-        serialized += "```\n\n";
-    } else {
-        const modeText = workNode.data.mode === 'rewrite' ? '改写模式' : '续写模式';
-        serialized += `**原始作品 (${modeText}):**\n`;
-        serialized += "```\n";
-        serialized += `${workNode.data.content}\n`;
-        serialized += "```\n\n";
-    }
+  if (workNodes.length > 0) {
+      workNodes.forEach((workNode, index) => {
+        const titlePrefix = workNodes.length > 1 ? ` ${index + 1}` : '';
+        if (workNode.data.mode === 'parody') {
+          const levelMap = {
+              'reference': '参考 (仅参考文风，内容需完全不同)',
+              'imitation': '模仿 (模仿原文风格和结构，创作新内容)',
+              '套作': '套作 (严格模仿原文结构和句式，替换核心元素)',
+          };
+          const levelText = levelMap[workNode.data.parodyLevel || 'reference'];
+          serialized += `**写作风格仿写目标${titlePrefix} (程度: ${levelText}):**\n`;
+          serialized += "```\n";
+          serialized += `${workNode.data.content}\n`;
+          serialized += "```\n\n";
+      } else {
+          const modeText = workNode.data.mode === 'rewrite' ? '改写模式' : '续写模式';
+          serialized += `**原始作品${titlePrefix} (${modeText}):**\n`;
+          serialized += "```\n";
+          serialized += `${workNode.data.content}\n`;
+          serialized += "```\n\n";
+      }
+    });
   }
 
   const globalStyleEdges = edges.filter(e => {
@@ -157,7 +160,12 @@ export function serializeGraph(nodes: Node[], edges: Edge[]): string {
 }
 
 export const getBasePrompt = (nodes: Node[]): { systemInstruction: string, taskInstruction: string } => {
-    const workNode = nodes.find(n => n.type === NodeType.WORK) as Node<WorkNodeData> | undefined;
+    // Prioritize 'rewrite', then 'continue', then 'parody', then any other work node.
+    const workNode = (nodes.find(n => n.type === NodeType.WORK && (n.data as WorkNodeData).mode === 'rewrite') ||
+                    nodes.find(n => n.type === NodeType.WORK && (n.data as WorkNodeData).mode === 'continue') ||
+                    nodes.find(n => n.type === NodeType.WORK && (n.data as WorkNodeData).mode === 'parody') ||
+                    nodes.find(n => n.type === NodeType.WORK)) as Node<WorkNodeData> | undefined;
+
     if (workNode) {
         if (workNode.data.mode === 'rewrite') {
             return {

@@ -35,14 +35,18 @@ const App: React.FC = () => {
   const [language, setLanguage] = useState<string>('中文');
   // FIX: Updated the default model from 'gemini-flash-latest' to 'gemini-2.5-flash' to align with current API guidelines.
   const [model, setModel] = useState<string>('gemini-flash-latest');
-  const [theme, setTheme] = useState<'light' | 'dark'>(() => (localStorage.getItem('theme') as 'light' | 'dark') || 'dark');
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => (localStorage.getItem('theme') as 'light' | 'dark') || 'light');
   const [targetWordCount, setTargetWordCount] = useState<string>('');
 
   const { progress, progressMessage, activeProgressTask, isAnyTaskRunning, setProgressMessage, startProgress, stopProgress } = useProgress();
 
   const [modalContent, setModalContent] = useState<'outline' | 'story' | null>(null);
-  const [outline, setOutline] = useState<StructuredOutline | null>(null);
-  const [story, setStory] = useState<string>('');
+  
+  const [outlineHistory, setOutlineHistory] = useState<StructuredOutline[]>([]);
+  const [currentOutlineIndex, setCurrentOutlineIndex] = useState(0);
+  const [storyHistory, setStoryHistory] = useState<string[]>([]);
+  const [currentStoryIndex, setCurrentStoryIndex] = useState(0);
+
   const [storyHeadings, setStoryHeadings] = useState<Heading[]>([]);
   const [revisionPrompt, setRevisionPrompt] = useState('');
 
@@ -59,6 +63,16 @@ const App: React.FC = () => {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const storyContentRef = useRef<HTMLDivElement>(null);
+
+  const currentOutline = outlineHistory[currentOutlineIndex] || null;
+  const previousOutline = outlineHistory[currentOutlineIndex - 1] || null;
+  const canUndoOutline = currentOutlineIndex > 0;
+  const canRedoOutline = currentOutlineIndex < outlineHistory.length - 1;
+
+  const currentStory = storyHistory[currentStoryIndex] || '';
+  const previousStory = storyHistory[currentStoryIndex - 1] || null;
+  const canUndoStory = currentStoryIndex > 0;
+  const canRedoStory = currentStoryIndex < storyHistory.length - 1;
 
   const showAlert = (title: string, message: string) => {
     setAlertModal({ isOpen: true, title, message });
@@ -127,17 +141,12 @@ const App: React.FC = () => {
         newNode.data = { ...data, userInput: '' } as StructureNodeData;
         break;
       case NodeType.WORK:
-        // Only allow one work node at a time
-        if (nodes.some(n => n.type === NodeType.WORK)) {
-            showAlert("操作受限", "目前只支持添加一个作品节点。");
-            return;
-        }
         newNode.data = { title: data?.title || '导入作品', content: data?.content || '', mode: 'rewrite' } as WorkNodeData;
         break;
     }
 
     setNodes(nds => [...nds, newNode]);
-  }, [nodes]);
+  }, []);
 
   const updateNodeData = useCallback((nodeId: string, data: any) => {
     setNodes(nds => nds.map(n => n.id === nodeId ? { ...n, data } : n));
@@ -438,7 +447,8 @@ const App: React.FC = () => {
         }
         const result = await generateOutline(nodes, edges, language, model, wordCount);
         stopProgress(() => {
-            setOutline(result);
+            setOutlineHistory([result]);
+            setCurrentOutlineIndex(0);
             setAssetLibrary(prev => [...prev, { type: 'outline', content: result, title: `大纲: ${result.title}`, timestamp: new Date() }]);
             setModalContent('outline');
         });
@@ -450,22 +460,23 @@ const App: React.FC = () => {
   };
 
   const handleGenerateStoryFromOutline = async () => {
-        if (!outline || !outline.segments || outline.segments.length === 0) {
+        if (!currentOutline || !currentOutline.segments || currentOutline.segments.length === 0) {
             showAlert("无法生成", "请先生成一个有效的故事大纲。");
             return;
         }
 
         setModalContent(null); // Close outline modal
         
-        const isShortForm = outline.segments.length > 0 && outline.segments[0].key_events && !outline.segments[0].chapters;
+        const isShortForm = currentOutline.segments.length > 0 && currentOutline.segments[0].key_events && !currentOutline.segments[0].chapters;
 
         if (isShortForm) {
             startProgress('story', '正在创作短篇故事...');
             try {
-                const finalStory = await generateShortStory(nodes, edges, outline, language, model);
+                const finalStory = await generateShortStory(nodes, edges, currentOutline, language, model);
                 stopProgress(() => {
-                    setStory(finalStory);
-                    setAssetLibrary(prev => [...prev, { type: 'story', content: finalStory, title: `故事: ${outline.title}`, timestamp: new Date() }]);
+                    setStoryHistory([finalStory]);
+                    setCurrentStoryIndex(0);
+                    setAssetLibrary(prev => [...prev, { type: 'story', content: finalStory, title: `故事: ${currentOutline.title}`, timestamp: new Date() }]);
                     setModalContent('story');
                 });
             } catch (err) {
@@ -478,12 +489,12 @@ const App: React.FC = () => {
             startProgress('story', '正在准备创作...');
             let accumulatedStory = "";
             const storyParts: string[] = [];
-            const totalChapters = outline.segments.reduce((acc, s) => acc + (s.chapters?.length || 0), 0);
+            const totalChapters = currentOutline.segments.reduce((acc, s) => acc + (s.chapters?.length || 0), 0);
             let chaptersDone = 0;
 
             try {
-                for (let i = 0; i < outline.segments.length; i++) {
-                    const segment = outline.segments[i];
+                for (let i = 0; i < currentOutline.segments.length; i++) {
+                    const segment = currentOutline.segments[i];
                     if (!segment.chapters) continue;
 
                     for (let j = 0; j < segment.chapters.length; j++) {
@@ -491,7 +502,7 @@ const App: React.FC = () => {
                         setProgressMessage(`正在创作第 ${chaptersDone} / ${totalChapters} 章...`);
                         
                         const newChapterText = await generateStoryChapter(
-                            nodes, edges, outline, accumulatedStory, i, j, language, model
+                            nodes, edges, currentOutline, accumulatedStory, i, j, language, model
                         );
                         
                         storyParts.push(newChapterText);
@@ -501,8 +512,9 @@ const App: React.FC = () => {
                 
                 stopProgress(() => {
                     const finalStory = storyParts.join('\n\n');
-                    setStory(finalStory);
-                    setAssetLibrary(prev => [...prev, { type: 'story', content: finalStory, title: `故事: ${outline.title}`, timestamp: new Date() }]);
+                    setStoryHistory([finalStory]);
+                    setCurrentStoryIndex(0);
+                    setAssetLibrary(prev => [...prev, { type: 'story', content: finalStory, title: `故事: ${currentOutline.title}`, timestamp: new Date() }]);
                     setModalContent('story');
                 });
 
@@ -520,14 +532,19 @@ const App: React.FC = () => {
         const wordCount = parseInt(targetWordCount, 10);
         // Step 1: Generate a temporary short-story outline
         const tempOutline = await generateOutline(nodes, edges, language, model, wordCount);
-        setOutline(tempOutline); // Set outline for title and asset saving
+        
+        // This won't be displayed, but stored for context and asset library
+        setOutlineHistory([tempOutline]);
+        setCurrentOutlineIndex(0);
+
         setProgressMessage('正在创作故事...');
         
         // Step 2: Generate the story from the temporary outline
         const finalStory = await generateShortStory(nodes, edges, tempOutline, language, model);
 
         stopProgress(() => {
-            setStory(finalStory);
+            setStoryHistory([finalStory]);
+            setCurrentStoryIndex(0);
             setAssetLibrary(prev => [...prev, { type: 'outline', content: tempOutline, title: `大纲: ${tempOutline.title}`, timestamp: new Date() }]);
             setAssetLibrary(prev => [...prev, { type: 'story', content: finalStory, title: `故事: ${tempOutline.title}`, timestamp: new Date() }]);
             setModalContent('story');
@@ -543,7 +560,7 @@ const App: React.FC = () => {
     const targetWordCountInt = parseInt(targetWordCount, 10);
     const canGenerateStoryDirectly = !isNaN(targetWordCountInt) && targetWordCountInt > 0 && targetWordCountInt <= 2000;
 
-    if (outline) {
+    if (currentOutline) {
         handleGenerateStoryFromOutline();
     } else if (canGenerateStoryDirectly) {
         handleGenerateStoryDirectly();
@@ -558,13 +575,30 @@ const App: React.FC = () => {
     };
 
     const handleReviseOutline = async () => {
-        if (!outline || !revisionPrompt.trim()) return;
+        if (!currentOutline || !revisionPrompt.trim()) return;
         startProgress('revise_outline', '正在修改大纲...');
         try {
-            const revisedOutline = await reviseOutline(outline, revisionPrompt, language, model);
+            const revisedOutline = await reviseOutline(currentOutline, revisionPrompt, language, model);
             stopProgress(() => {
-                setOutline(revisedOutline);
-                setAssetLibrary(prev => prev.map(asset => asset.content === outline ? { ...asset, content: revisedOutline, title: `大纲: ${revisedOutline.title}` } : asset));
+                const newHistory = [...outlineHistory.slice(0, currentOutlineIndex + 1), revisedOutline];
+                setOutlineHistory(newHistory);
+                setCurrentOutlineIndex(newHistory.length - 1);
+                // Update asset library if this was the latest version
+                // FIX: Replaced findLastIndex with a reverse for-loop for broader compatibility.
+                let oldAssetIndex = -1;
+                for (let i = assetLibrary.length - 1; i >= 0; i--) {
+                    if (assetLibrary[i].type === 'outline' && JSON.stringify(assetLibrary[i].content) === JSON.stringify(currentOutline)) {
+                        oldAssetIndex = i;
+                        break;
+                    }
+                }
+                if (oldAssetIndex > -1) {
+                    setAssetLibrary(prev => {
+                        const newAssets = [...prev];
+                        newAssets[oldAssetIndex] = { ...newAssets[oldAssetIndex], content: revisedOutline, title: `大纲: ${revisedOutline.title}`};
+                        return newAssets;
+                    });
+                }
                 setRevisionPrompt('');
             });
         } catch (err) {
@@ -575,13 +609,30 @@ const App: React.FC = () => {
     };
 
     const handleReviseStory = async () => {
-        if (!story || !revisionPrompt.trim()) return;
+        if (!currentStory || !revisionPrompt.trim()) return;
         startProgress('revise_story', '正在修改故事...');
         try {
-            const revisedStory = await reviseStory(story, revisionPrompt, language, model);
+            const revisedStory = await reviseStory(currentStory, revisionPrompt, language, model);
             stopProgress(() => {
-                setStory(revisedStory);
-                setAssetLibrary(prev => prev.map(asset => asset.content === story ? { ...asset, content: revisedStory } : asset));
+                const newHistory = [...storyHistory.slice(0, currentStoryIndex + 1), revisedStory];
+                setStoryHistory(newHistory);
+                setCurrentStoryIndex(newHistory.length - 1);
+                // Update asset library
+                // FIX: Replaced findLastIndex with a reverse for-loop for broader compatibility.
+                let oldAssetIndex = -1;
+                for (let i = assetLibrary.length - 1; i >= 0; i--) {
+                    if (assetLibrary[i].type === 'story' && assetLibrary[i].content === currentStory) {
+                        oldAssetIndex = i;
+                        break;
+                    }
+                }
+                 if (oldAssetIndex > -1) {
+                    setAssetLibrary(prev => {
+                        const newAssets = [...prev];
+                        newAssets[oldAssetIndex] = { ...newAssets[oldAssetIndex], content: revisedStory };
+                        return newAssets;
+                    });
+                }
                 setRevisionPrompt('');
             });
         } catch (err) {
@@ -590,6 +641,51 @@ const App: React.FC = () => {
             });
         }
     };
+
+    const updateAssetOnUndoRedo = (oldContent: StructuredOutline | string, newContent: StructuredOutline | string, type: 'outline' | 'story') => {
+        setAssetLibrary(prev => {
+            let assetIndex = -1;
+            for (let i = prev.length - 1; i >= 0; i--) {
+                if (prev[i].type === type) {
+                    const contentMatches = type === 'outline'
+                        ? JSON.stringify(prev[i].content) === JSON.stringify(oldContent)
+                        : prev[i].content === oldContent;
+                    if (contentMatches) {
+                        assetIndex = i;
+                        break;
+                    }
+                }
+            }
+
+            if (assetIndex > -1) {
+                const newAssets = [...prev];
+                const updatedAsset = { ...newAssets[assetIndex], content: newContent };
+                if (type === 'outline') {
+                    updatedAsset.title = `大纲: ${(newContent as StructuredOutline).title}`;
+                }
+                newAssets[assetIndex] = updatedAsset;
+                return newAssets;
+            }
+            return prev;
+        });
+    };
+
+    const handleUndoRedo = (type: 'outline' | 'story', action: 'undo' | 'redo') => {
+        if (type === 'outline') {
+            const newIndex = action === 'undo' ? currentOutlineIndex - 1 : currentOutlineIndex + 1;
+            if (newIndex >= 0 && newIndex < outlineHistory.length) {
+                updateAssetOnUndoRedo(outlineHistory[currentOutlineIndex], outlineHistory[newIndex], 'outline');
+                setCurrentOutlineIndex(newIndex);
+            }
+        } else {
+            const newIndex = action === 'undo' ? currentStoryIndex - 1 : currentStoryIndex + 1;
+            if (newIndex >= 0 && newIndex < storyHistory.length) {
+                updateAssetOnUndoRedo(storyHistory[currentStoryIndex], storyHistory[newIndex], 'story');
+                setCurrentStoryIndex(newIndex);
+            }
+        }
+    };
+
 
   const handleCopy = async (content: string) => {
     if (!content) {
@@ -719,7 +815,7 @@ const App: React.FC = () => {
 
         <GenerationControls
             isAnyTaskRunning={isAnyTaskRunning}
-            outline={outline}
+            outline={currentOutline}
             targetWordCount={targetWordCount}
             onWordCountChange={handleWordCountChange}
             onAdjustWordCount={adjustWordCount}
@@ -742,8 +838,10 @@ const App: React.FC = () => {
 
       <ResultModals
         modalContent={modalContent}
-        outline={outline}
-        story={story}
+        outline={currentOutline}
+        previousOutline={previousOutline}
+        story={currentStory}
+        previousStory={previousStory}
         storyHeadings={storyHeadings}
         storyContentRef={storyContentRef}
         isAnyTaskRunning={isAnyTaskRunning}
@@ -758,6 +856,10 @@ const App: React.FC = () => {
         onDownload={handleDownload}
         onTocClick={handleTocClick}
         onHeadingsParse={setStoryHeadings}
+        canUndo={modalContent === 'outline' ? canUndoOutline : canUndoStory}
+        canRedo={modalContent === 'outline' ? canRedoOutline : canRedoStory}
+        onUndo={() => handleUndoRedo(modalContent!, 'undo')}
+        onRedo={() => handleUndoRedo(modalContent!, 'redo')}
       />
       
       <Modal isOpen={isAssetModalOpen} onClose={() => setIsAssetModalOpen(false)} title="资产库">
@@ -817,10 +919,12 @@ const App: React.FC = () => {
                                 <button
                                     onClick={() => {
                                         if (asset.type === 'outline') {
-                                            setOutline(asset.content as StructuredOutline);
+                                            setOutlineHistory([asset.content as StructuredOutline]);
+                                            setCurrentOutlineIndex(0);
                                             setModalContent('outline');
                                         } else {
-                                            setStory(asset.content as string);
+                                            setStoryHistory([asset.content as string]);
+                                            setCurrentStoryIndex(0);
                                             setModalContent('story');
                                         }
                                         setIsAssetModalOpen(false);

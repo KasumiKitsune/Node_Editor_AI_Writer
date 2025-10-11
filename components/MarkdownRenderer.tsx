@@ -13,7 +13,7 @@ interface MarkdownRendererProps {
 }
 
 // This function handles inline markdown formatting like bold, italic, code, etc.
-const renderLineWithInlineFormatting = (line: string): React.ReactNode => {
+export const renderLineWithInlineFormatting = (line: string): React.ReactNode => {
   // Regex to find all supported markdown tokens.
   // It looks for `code`, **bold**, *italic*, and ~~strikethrough~~.
   const regex = /(`[^`]+`|\*\*[^*]+\*\*|\*[^*]+\*|~~[^~]+~~)/g;
