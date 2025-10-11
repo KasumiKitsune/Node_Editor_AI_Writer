@@ -58,6 +58,7 @@ interface ResultModalsProps {
     storyContentRef: React.RefObject<HTMLDivElement>;
     isAnyTaskRunning: boolean;
     activeProgressTask: string | null;
+    progress: number;
     revisionPrompt: string;
     onRevisionPromptChange: (value: string) => void;
     onRevise: () => void;
@@ -84,6 +85,7 @@ const ResultModals: React.FC<ResultModalsProps> = ({
     storyContentRef,
     isAnyTaskRunning,
     activeProgressTask,
+    progress,
     revisionPrompt,
     onRevisionPromptChange,
     onRevise,
@@ -117,16 +119,16 @@ const ResultModals: React.FC<ResultModalsProps> = ({
         const diffResult = useMemo(() => diffLines(oldText, newText), [oldText, newText]);
 
         return (
-            <div>
+            <div className="font-mono text-sm">
                 {diffResult.map((item, index) => {
-                    const baseClasses = 'px-2 py-0.5 whitespace-pre-wrap';
+                    const baseClasses = 'px-4 py-0.5 whitespace-pre-wrap relative';
                     let classes = baseClasses;
                     let sign = ' ';
                     if (item.type === 'added') {
-                        classes += ' bg-green-500/20';
+                        classes += ' bg-green-200/40 dark:bg-green-900/40';
                         sign = '+';
                     } else if (item.type === 'removed') {
-                        classes += ' bg-red-500/20';
+                        classes += ' bg-red-200/40 dark:bg-red-900/40 line-through';
                         sign = '-';
                     }
                     return (
@@ -140,56 +142,64 @@ const ResultModals: React.FC<ResultModalsProps> = ({
         );
     };
     
-    const getHighlightClass = (isChanged: boolean) => (showDiff && isChanged) ? 'bg-yellow-500/20 dark:bg-yellow-400/20 p-1 -m-1 rounded-md' : '';
+    const getHighlightClass = (isChanged: boolean) => (showDiff && isChanged) ? 'bg-amber-200/50 dark:bg-amber-400/20 p-1 -m-1 rounded-md' : '';
+
+    const modalHeaderActions = (
+        <>
+            <button onClick={() => onCopy(modalContent === 'outline' ? JSON.stringify(outline, null, 2) : story)} className="w-10 h-10 flex items-center justify-center rounded-full bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-slate-100 transition-colors" title="复制"><CopyIcon className="h-5 w-5"/></button>
+            <button onClick={() => onDownload(modalContent === 'outline' ? JSON.stringify(outline, null, 2) : story, `${(outline?.title || 'content')}`)} className="w-10 h-10 flex items-center justify-center rounded-full bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-slate-100 transition-colors" title="下载"><DownloadIcon className="h-5 w-5"/></button>
+        </>
+    );
 
     const renderActionButtons = () => (
-        <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-            <div className="flex items-center space-x-2">
-                <div className="flex items-center space-x-1">
-                    <button onClick={() => onCopy(modalContent === 'outline' ? JSON.stringify(outline, null, 2) : story)} className="p-2 bg-gray-300 dark:bg-gray-600 rounded-lg hover:bg-gray-400 dark:hover:bg-gray-500 transition-colors" title="复制"><CopyIcon className="h-5 w-5"/></button>
-                    <button onClick={() => onDownload(modalContent === 'outline' ? JSON.stringify(outline, null, 2) : story, `${(outline?.title || 'content')}`)} className="p-2 bg-gray-300 dark:bg-gray-600 rounded-lg hover:bg-gray-400 dark:hover:bg-gray-500 transition-colors" title="下载"><DownloadIcon className="h-5 w-5"/></button>
-                    <button onClick={onUndo} disabled={!canUndo || isRevising} className="p-2 bg-gray-300 dark:bg-gray-600 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-400 dark:hover:bg-gray-500" title="撤销"><UndoIcon className="h-5 w-5"/></button>
-                    <button onClick={onRedo} disabled={!canRedo || isRevising} className="p-2 bg-gray-300 dark:bg-gray-600 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-400 dark:hover:bg-gray-500" title="重做"><RedoIcon className="h-5 w-5"/></button>
-                     <button onClick={() => setViewMode(v => v === 'diff' ? 'read' : 'diff')} disabled={!hasPreviousVersion} className="p-2 bg-gray-300 dark:bg-gray-600 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-400 dark:hover:bg-gray-500" title={viewMode === 'diff' ? '阅读视图' : '对比视图'}>
-                        {viewMode === 'diff' ? <EyeIcon className="h-5 w-5"/> : <DocumentDiffIcon className="h-5 w-5"/>}
-                     </button>
+        <div className="mt-6 pt-6 border-t border-slate-200 dark:border-slate-800">
+            <div className="flex flex-col gap-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center space-x-1">
+                        <button onClick={onUndo} disabled={!canUndo || isRevising} className="p-3 bg-slate-200 dark:bg-slate-800 rounded-full disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors" title="撤销"><UndoIcon className="h-5 w-5"/></button>
+                        <button onClick={onRedo} disabled={!canRedo || isRevising} className="p-3 bg-slate-200 dark:bg-slate-800 rounded-full disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors" title="重做"><RedoIcon className="h-5 w-5"/></button>
+                        <button onClick={() => setViewMode(v => v === 'diff' ? 'read' : 'diff')} disabled={!hasPreviousVersion} className="p-3 bg-slate-200 dark:bg-slate-800 rounded-full disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors" title={viewMode === 'diff' ? '阅读视图' : '对比视图'}>
+                            {viewMode === 'diff' ? <EyeIcon className="h-5 w-5"/> : <DocumentDiffIcon className="h-5 w-5"/>}
+                        </button>
+                    </div>
+
+                    {modalContent === 'outline' && (
+                        <button 
+                            onClick={onGenerateStory}
+                            disabled={isAnyTaskRunning || !outline}
+                            className="px-6 h-12 bg-emerald-600 text-white font-bold rounded-full hover:bg-emerald-500 transition-colors disabled:bg-slate-500 dark:disabled:bg-slate-700 disabled:text-slate-100 dark:disabled:text-slate-400 disabled:cursor-not-allowed shadow-lg shadow-emerald-500/20 hover:shadow-emerald-500/40"
+                        >
+                            {activeProgressTask === 'story' ? '生成中...' : '开始创作'}
+                        </button>
+                    )}
                 </div>
-                <div className="flex-grow flex items-center">
+                
+                <div className="flex items-center w-full">
                     <input
                         id="revision-prompt"
                         value={revisionPrompt}
                         onChange={(e) => onRevisionPromptChange(e.target.value)}
                         placeholder="迭代修改需求..."
-                        className="w-full bg-gray-200 dark:bg-gray-700 text-sm p-2 rounded-l-md focus:outline-none focus:ring-2 focus:ring-cyan-500 transition-colors disabled:bg-gray-300 dark:disabled:bg-gray-800"
+                        className="w-full h-12 bg-slate-200 dark:bg-slate-800 text-sm p-4 rounded-l-full focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors disabled:bg-slate-300 dark:disabled:bg-slate-800"
                         disabled={isRevising}
                     />
                     <button
                         onClick={onRevise}
                         disabled={isRevising || !revisionPrompt.trim()}
-                        className="px-4 h-9 bg-purple-600 text-white font-semibold rounded-r-md hover:bg-purple-500 transition-colors disabled:bg-gray-400 dark:disabled:bg-gray-600 flex-shrink-0"
+                        className="px-5 h-12 w-24 bg-purple-600 text-white font-semibold rounded-r-full hover:bg-purple-500 transition-colors disabled:bg-slate-400 dark:disabled:bg-slate-600 flex items-center justify-center flex-shrink-0"
                     >
-                        {isRevising ? '...' : '修改'}
+                        {isRevising ? <span className="text-xs font-normal">{`${progress}%`}</span> : '修改'}
                     </button>
                 </div>
-
-                {modalContent === 'outline' && (
-                     <button 
-                        onClick={onGenerateStory}
-                        disabled={isAnyTaskRunning || !outline}
-                        className="px-4 py-2 bg-emerald-600 text-white font-semibold rounded-lg hover:bg-emerald-500 transition-colors disabled:bg-gray-400 dark:disabled:bg-gray-600 flex-shrink-0"
-                    >
-                        {activeProgressTask === 'story' ? '生成中...' : '开始创作'}
-                    </button>
-                )}
             </div>
         </div>
     );
 
     return (
         <>
-            <Modal isOpen={modalContent === 'outline' && !!outline} onClose={onClose} title={`故事大纲: ${outline?.title || ''}`}>
-                <div className="w-full max-h-[65vh] flex flex-col">
-                    <div className="flex-grow overflow-y-auto bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-200 p-4 rounded-md border border-gray-200 dark:border-gray-700">
+            <Modal isOpen={modalContent === 'outline' && !!outline} onClose={onClose} title={`故事大纲: ${outline?.title || ''}`} headerActions={modalHeaderActions}>
+                <div className="w-full h-full flex flex-col">
+                    <div className="flex-grow min-h-0 overflow-y-auto bg-slate-50/50 dark:bg-slate-900/50 text-slate-800 dark:text-slate-200 p-4 rounded-3xl border border-slate-200 dark:border-slate-800">
                         <div className="space-y-6">
                             {outline?.segments.map((segment, index) => {
                                 const prevSegment = previousOutline?.segments.find(s => s.segment_title === segment.segment_title);
@@ -198,10 +208,10 @@ const ResultModals: React.FC<ResultModalsProps> = ({
                                 const wordCountChanged = !isNewSegment && segment.estimated_word_count !== prevSegment.estimated_word_count;
 
                                 return (
-                                <div key={index} className={`p-4 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 ${showDiff && isNewSegment ? 'border-green-500/50' : ''}`}>
-                                    <h3 className={`text-xl font-bold text-cyan-600 dark:text-cyan-400 mb-3 border-b border-cyan-500/30 pb-2 ${getHighlightClass(titleChanged)}`}>
+                                <div key={index} className={`p-4 bg-white dark:bg-slate-800/60 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700/50 ${showDiff && isNewSegment ? 'border-green-500/50' : ''}`}>
+                                    <h3 className={`text-xl font-bold text-blue-600 dark:text-blue-400 mb-3 border-b border-blue-500/20 pb-2 ${getHighlightClass(titleChanged)}`}>
                                         {segment.chapters ? `第 ${index + 1} 部分: ` : ''}{segment.segment_title}
-                                        <span className={`text-sm font-normal text-gray-500 dark:text-gray-400 ml-3 ${getHighlightClass(wordCountChanged)}`}>(预计 {segment.estimated_word_count} 字)</span>
+                                        <span className={`text-sm font-normal text-slate-500 dark:text-slate-400 ml-3 ${getHighlightClass(wordCountChanged)}`}>(预计 {segment.estimated_word_count} 字)</span>
                                     </h3>
                                     <div className="space-y-4 pl-4">
                                         {segment.chapters ? (
@@ -212,16 +222,16 @@ const ResultModals: React.FC<ResultModalsProps> = ({
                                                 const eventsChanged = !isNewChapter && JSON.stringify(chapter.key_events) !== JSON.stringify(prevChapter?.key_events);
 
                                                 return (
-                                                <div key={chapter.chapter_number} className={showDiff && isNewChapter ? 'p-2 -m-2 bg-green-500/10 rounded-md' : ''}>
-                                                    <h4 className={`font-semibold text-gray-800 dark:text-gray-200 ${getHighlightClass(titleChanged)}`}>{`第 ${chapter.chapter_number} 章: ${chapter.chapter_title}`}</h4>
+                                                <div key={chapter.chapter_number} className={showDiff && isNewChapter ? 'p-2 -m-2 bg-green-200/20 dark:bg-green-900/20 rounded-md' : ''}>
+                                                    <h4 className={`font-semibold text-slate-800 dark:text-slate-200 ${getHighlightClass(titleChanged)}`}>{`第 ${chapter.chapter_number} 章: ${chapter.chapter_title}`}</h4>
                                                     {(chapter.point_of_view || chapter.setting) && (
-                                                        <p className="text-xs text-gray-500 dark:text-gray-400 italic mb-1">
+                                                        <p className="text-xs text-slate-500 dark:text-slate-400 italic mb-1">
                                                         {chapter.point_of_view && `视角: ${chapter.point_of_view}`}
                                                         {chapter.point_of_view && chapter.setting && ' | '}
                                                         {chapter.setting && `场景: ${chapter.setting}`}
                                                         </p>
                                                     )}
-                                                    <ul className={`list-disc list-inside text-gray-600 dark:text-gray-300 space-y-1 text-sm ${getHighlightClass(eventsChanged)}`}>
+                                                    <ul className={`list-disc list-inside text-slate-600 dark:text-slate-300 space-y-1 text-sm ${getHighlightClass(eventsChanged)}`}>
                                                         {chapter.key_events.map((event, eventIdx) => (
                                                             <li key={eventIdx}>{event}</li>
                                                         ))}
@@ -230,8 +240,8 @@ const ResultModals: React.FC<ResultModalsProps> = ({
                                             )})
                                         ) : segment.key_events ? (
                                             <div>
-                                                <h4 className="font-semibold text-gray-800 dark:text-gray-200">关键情节</h4>
-                                                <ul className="list-disc list-inside text-gray-600 dark:text-gray-300 space-y-1 text-sm">
+                                                <h4 className="font-semibold text-slate-800 dark:text-slate-200">关键情节</h4>
+                                                <ul className="list-disc list-inside text-slate-600 dark:text-slate-300 space-y-1 text-sm">
                                                     {segment.key_events.map((event, eventIdx) => (
                                                         <li key={eventIdx}>{event}</li>
                                                     ))}
@@ -247,18 +257,18 @@ const ResultModals: React.FC<ResultModalsProps> = ({
                 </div>
             </Modal>
 
-            <Modal isOpen={modalContent === 'story'} onClose={onClose} title={`故事: ${outline?.title || ''}`}>
-                <div className="w-full max-h-[70vh] flex flex-col">
-                    <div className="flex flex-grow overflow-hidden">
+            <Modal isOpen={modalContent === 'story'} onClose={onClose} title={`故事: ${outline?.title || ''}`} headerActions={modalHeaderActions}>
+                <div className="w-full h-full flex flex-col">
+                    <div className="flex flex-grow overflow-hidden gap-6 min-h-0">
                         {storyHeadings.length > 0 && (
-                            <nav className="w-64 flex-shrink-0 pr-4 border-r border-gray-200 dark:border-gray-700 overflow-y-auto">
-                                <p className="text-lg font-semibold mb-2 text-cyan-600 dark:text-cyan-400">目录</p>
+                            <nav className="w-64 flex-shrink-0 pr-4 overflow-y-auto hidden md:block">
+                                <p className="text-xl font-bold mb-4 text-blue-600 dark:text-blue-400">目录</p>
                                 <ul className="space-y-1">
                                     {storyHeadings.map(h => (
                                         <li key={h.id} style={{ paddingLeft: `${(h.level - 1) * 1}rem`}}>
                                             <button 
                                                 onClick={() => onTocClick(h.id)}
-                                                className="text-left text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors text-sm w-full truncate"
+                                                className="text-left text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-800 rounded-md p-2 transition-colors text-sm w-full truncate"
                                                 title={h.text}
                                             >
                                                 {h.text}
@@ -270,7 +280,7 @@ const ResultModals: React.FC<ResultModalsProps> = ({
                         )}
                         <div 
                             ref={storyContentRef} 
-                            className={`relative bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-200 rounded-md overflow-y-auto ${storyHeadings.length > 0 ? 'pl-4 flex-grow' : 'w-full'}`}
+                            className={`relative bg-slate-50/50 dark:bg-slate-900/50 text-slate-800 dark:text-slate-200 rounded-3xl overflow-y-auto p-4 md:p-6 flex-grow`}
                             style={{ scrollBehavior: 'smooth' }}
                         >
                            {showDiff && previousStory ? (

@@ -1,11 +1,11 @@
-import React from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Node, NodeType, PlotNodeData, CharacterNodeData, SettingNodeData, StyleNodeData, KeyValueField, StructureNodeData, StructureCategory, WorkNodeData, EnvironmentNodeData } from '../types';
 import { PlusIcon, TrashIcon, XIcon, BookOpenIcon, SparklesIcon, ChevronUpIcon, ChevronDownIcon, CustomSelect, CustomSelectOption } from './icons';
 
 const ProgressDisplay: React.FC<{ progress: number }> = ({ progress }) => (
-    <div className="relative w-full h-full flex items-center justify-center text-xs">
-        <div className="absolute top-0 left-0 h-full bg-cyan-500/50 rounded-md" style={{ width: `${progress}%` }} />
-        <span className="relative z-10">{`处理中... ${progress}%`}</span>
+    <div className="relative w-full h-full flex items-center justify-center text-xs font-semibold">
+        <div className="absolute top-0 left-0 h-full bg-blue-400/50 rounded-full" style={{ width: `${progress}%` }} />
+        <span className="relative z-10">{`${progress}%`}</span>
     </div>
 );
 
@@ -19,13 +19,15 @@ interface NodeComponentProps {
   connectableTargetType?: 'style' | 'flow' | null;
   activeProgressTask?: string | null;
   progress?: number;
+  isDragging?: boolean;
+  highlightedNodeId?: string | null;
 }
 
-const stopPropagationEvents = {
-    onMouseDown: (e: React.MouseEvent) => e.stopPropagation(),
-    onTouchStart: (e: React.TouchEvent) => e.stopPropagation(),
-    onWheel: (e: React.WheelEvent) => e.stopPropagation(),
-};
+const Header: React.FC<{ children: React.ReactNode, className?: string }> = ({ children, className }) => (
+    <div className={`p-4 rounded-t-3xl ${className}`} style={{ cursor: 'grab' }}>
+        <h3 className="font-bold text-lg">{children}</h3>
+    </div>
+);
 
 const PlotNode: React.FC<{ node: Node<PlotNodeData>, onUpdateData: (data: PlotNodeData) => void, isCollapsed?: boolean }> = ({ node, onUpdateData, isCollapsed }) => {
     const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -34,22 +36,22 @@ const PlotNode: React.FC<{ node: Node<PlotNodeData>, onUpdateData: (data: PlotNo
 
     return (
         <>
-            <div className="bg-cyan-700 p-2 rounded-t-lg">
-                <h3 className="font-bold text-white">{node.data.title}</h3>
-            </div>
-            {!isCollapsed && (
-                <div className="p-3 space-y-2 text-sm">
-                    <p className="text-gray-600 dark:text-gray-300">{node.data.description}</p>
-                    <textarea
-                        placeholder="添加额外需求..."
-                        value={node.data.userInput || ''}
-                        onChange={handleInputChange}
-                        className="w-full bg-gray-200 dark:bg-gray-700 text-xs p-1 rounded focus:outline-none focus:ring-2 focus:ring-cyan-500 resize-none transition-colors"
-                        rows={2}
-                        {...stopPropagationEvents}
-                    />
+            <Header className="bg-blue-200 text-blue-900 dark:bg-blue-950 dark:text-blue-200 node-drag-handle">{node.data.title}</Header>
+            <div className={`grid transition-[grid-template-rows] duration-200 ease-in-out`} style={{ gridTemplateRows: isCollapsed ? '0fr' : '1fr' }}>
+                <div className="overflow-hidden">
+                    <div className="p-4 space-y-3 text-sm">
+                        <p className="text-slate-600 dark:text-slate-300 text-base">{node.data.description}</p>
+                        <textarea
+                            placeholder="添加额外需求..."
+                            value={node.data.userInput || ''}
+                            onChange={handleInputChange}
+                            draggable="false"
+                            className="w-full bg-slate-200 dark:bg-slate-700/50 text-sm p-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none transition-colors"
+                            rows={2}
+                        />
+                    </div>
                 </div>
-            )}
+            </div>
         </>
     );
 };
@@ -61,22 +63,22 @@ const StructureNode: React.FC<{ node: Node<StructureNodeData>, onUpdateData: (da
 
     return (
         <>
-            <div className="bg-yellow-700 p-2 rounded-t-lg">
-                <h3 className="font-bold text-white">{node.data.title}</h3>
-            </div>
-            {!isCollapsed && (
-                <div className="p-3 space-y-2 text-sm">
-                    <p className="text-gray-600 dark:text-gray-300 italic">{node.data.description}</p>
-                    <textarea
-                        placeholder="添加额外需求..."
-                        value={node.data.userInput || ''}
-                        onChange={handleInputChange}
-                        className="w-full bg-gray-200 dark:bg-gray-700 text-xs p-1 rounded focus:outline-none focus:ring-2 focus:ring-yellow-500 resize-none transition-colors"
-                        rows={2}
-                        {...stopPropagationEvents}
-                    />
+            <Header className="bg-amber-200 text-amber-900 dark:bg-amber-950 dark:text-amber-200 node-drag-handle">{node.data.title}</Header>
+            <div className={`grid transition-[grid-template-rows] duration-200 ease-in-out`} style={{ gridTemplateRows: isCollapsed ? '0fr' : '1fr' }}>
+                <div className="overflow-hidden">
+                    <div className="p-4 space-y-3 text-sm">
+                        <p className="text-slate-600 dark:text-slate-300 italic text-base">{node.data.description}</p>
+                        <textarea
+                            placeholder="添加额外需求..."
+                            value={node.data.userInput || ''}
+                            onChange={handleInputChange}
+                            draggable="false"
+                            className="w-full bg-slate-200 dark:bg-slate-700/50 text-sm p-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 resize-none transition-colors"
+                            rows={2}
+                        />
+                    </div>
                 </div>
-            )}
+            </div>
         </>
     );
 };
@@ -94,23 +96,23 @@ const StyleNode: React.FC<{ node: Node<StyleNodeData>, onUpdateData: (data: Styl
 
     return (
         <>
-            <div className="bg-pink-700 p-2 rounded-t-lg">
-                <h3 className="font-bold text-white">{node.data.title}</h3>
-            </div>
-            {!isCollapsed && (
-                <div className="p-3 space-y-2 text-sm">
-                    <p className="text-gray-600 dark:text-gray-300 italic text-xs">{node.data.description}</p>
-                    <div className="flex items-center space-x-2 pt-1" {...stopPropagationEvents}>
-                        <label htmlFor={`style-method-${node.id}`} className="text-xs font-medium text-gray-500 dark:text-gray-300">应用方式:</label>
-                        <CustomSelect
-                            id={`style-method-${node.id}`}
-                            options={styleMethodOptions}
-                            value={node.data.applicationMethod}
-                            onChange={handleMethodChange}
-                        />
+            <Header className="bg-pink-200 text-pink-900 dark:bg-pink-950 dark:text-pink-200 node-drag-handle">{node.data.title}</Header>
+            <div className={`grid transition-[grid-template-rows] duration-200 ease-in-out`} style={{ gridTemplateRows: isCollapsed ? '0fr' : '1fr' }}>
+                <div className="overflow-hidden">
+                    <div className="p-4 space-y-3 text-sm">
+                        <p className="text-slate-600 dark:text-slate-300 italic text-base">{node.data.description}</p>
+                        <div className="flex items-center space-x-2 pt-2">
+                            <label htmlFor={`style-method-${node.id}`} className="text-sm font-medium text-slate-500 dark:text-slate-300">应用方式:</label>
+                            <CustomSelect
+                                id={`style-method-${node.id}`}
+                                options={styleMethodOptions}
+                                value={node.data.applicationMethod}
+                                onChange={handleMethodChange}
+                            />
+                        </div>
                     </div>
                 </div>
-            )}
+            </div>
         </>
     );
 };
@@ -126,6 +128,15 @@ const EditableNode: React.FC<{
     isExpandingThisNode: boolean,
     progress: number,
 }> = ({ node, onUpdateData, headerColor, isCollapsed, onExpand, isAnyTaskRunning, isExpandingThisNode, progress }) => {
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const titleInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (isEditingTitle) {
+        titleInputRef.current?.focus();
+        titleInputRef.current?.select();
+    }
+  }, [isEditingTitle]);
   
   const handleFieldChange = (fieldId: string, keyOrValue: 'key' | 'value', value: string) => {
     const newFields = node.data.fields.map(f =>
@@ -160,77 +171,85 @@ const EditableNode: React.FC<{
   
   return (
     <>
-      <div className={`p-2 rounded-t-lg flex justify-between items-center ${headerColor}`}>
+      <div 
+        className={`p-4 rounded-t-3xl flex justify-between items-center node-drag-handle ${headerColor}`} 
+        style={{ cursor: 'grab' }}
+        onDoubleClick={() => setIsEditingTitle(true)}
+      >
         <input
+            ref={titleInputRef}
             type="text"
             value={node.data.title}
             onChange={handleTitleChange}
-            className="bg-transparent text-white font-bold w-5/6 focus:outline-none focus:ring-1 focus:ring-white rounded px-1"
+            onBlur={() => setIsEditingTitle(false)}
+            onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+            draggable="false"
+            className={`bg-transparent text-lg font-bold w-full focus:outline-none focus:ring-1 focus:ring-white/50 rounded-lg px-2 py-1 -ml-2 ${!isEditingTitle ? 'pointer-events-none' : ''}`}
             placeholder="未命名"
-            {...stopPropagationEvents}
         />
       </div>
-      {!isCollapsed && (
-        <div className="p-3 space-y-2">
-            {node.type === NodeType.SETTING && (
-                <div className="flex items-center space-x-2 pb-2" {...stopPropagationEvents}>
-                    <label htmlFor={`structure-select-${node.id}`} className="text-xs font-medium text-gray-500 dark:text-gray-300 whitespace-nowrap">叙事脉络:</label>
-                    <CustomSelect
-                        id={`structure-select-${node.id}`}
-                        options={narrativeStructureOptions}
-                        value={(node.data as SettingNodeData).narrativeStructure}
-                        onChange={handleStructureChange}
-                    />
-                </div>
-            )}
-            {node.data.fields.map(field => (
-            <div key={field.id} className="flex items-center space-x-1">
-                <input
-                type="text"
-                placeholder="属性"
-                value={field.key}
-                onChange={(e) => handleFieldChange(field.id, 'key', e.target.value)}
-                className="bg-gray-200 dark:bg-gray-700 text-sm p-1 rounded w-1/3 focus:outline-none focus:ring-2 focus:ring-cyan-500 transition-colors"
-                {...stopPropagationEvents}
-                />
-                <span className="text-gray-400 dark:text-gray-400">:</span>
-                <input
-                type="text"
-                placeholder="值"
-                value={field.value}
-                onChange={(e) => handleFieldChange(field.id, 'value', e.target.value)}
-                className="bg-gray-200 dark:bg-gray-700 text-sm p-1 rounded w-2/3 focus:outline-none focus:ring-2 focus:ring-cyan-500 transition-colors"
-                {...stopPropagationEvents}
-                />
-                <button onClick={() => removeField(field.id)} className="text-gray-400 dark:text-gray-500 hover:text-red-400">
-                <TrashIcon className="h-4 w-4" />
-                </button>
-            </div>
-            ))}
-            <div className="flex items-center space-x-2 pt-1">
-                <button onClick={addField} className="w-full flex items-center justify-center text-xs p-1 rounded-md bg-gray-300 dark:bg-gray-600 hover:bg-gray-400 dark:hover:bg-gray-500 transition-colors">
-                <PlusIcon className="h-4 w-4 mr-1" />
-                添加项目
-                </button>
-                {node.type === NodeType.SETTING && (
-                    <button 
-                        onClick={onExpand}
-                        disabled={isAnyTaskRunning}
-                        className="w-full flex items-center justify-center text-xs p-1 rounded-md bg-purple-600 hover:bg-purple-500 text-white transition-colors disabled:bg-gray-500 disabled:cursor-not-allowed"
-                    >
-                        {isExpandingThisNode ? (
-                            <ProgressDisplay progress={progress} />
-                        ) : (
-                            <>
-                                <SparklesIcon className="h-4 w-4 mr-1" />
-                                AI 扩展
-                            </>
+       <div className={`grid transition-[grid-template-rows] duration-200 ease-in-out`} style={{ gridTemplateRows: isCollapsed ? '0fr' : '1fr' }}>
+            <div className="overflow-hidden">
+                <div className="p-4 space-y-3">
+                    {node.type === NodeType.SETTING && (
+                        <div className="flex items-center space-x-2 pb-2">
+                            <label htmlFor={`structure-select-${node.id}`} className="text-sm font-medium text-slate-500 dark:text-slate-300 whitespace-nowrap">叙事脉络:</label>
+                            <CustomSelect
+                                id={`structure-select-${node.id}`}
+                                options={narrativeStructureOptions}
+                                value={(node.data as SettingNodeData).narrativeStructure}
+                                onChange={handleStructureChange}
+                            />
+                        </div>
+                    )}
+                    {node.data.fields.map(field => (
+                    <div key={field.id} className="flex items-center space-x-2">
+                        <input
+                        type="text"
+                        placeholder="属性"
+                        value={field.key}
+                        onChange={(e) => handleFieldChange(field.id, 'key', e.target.value)}
+                        draggable="false"
+                        className="bg-slate-200 dark:bg-slate-700/50 text-sm p-2.5 rounded-xl w-1/3 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+                        />
+                        <input
+                        type="text"
+                        placeholder="值"
+                        value={field.value}
+                        onChange={(e) => handleFieldChange(field.id, 'value', e.target.value)}
+                        draggable="false"
+                        className="bg-slate-200 dark:bg-slate-700/50 text-sm p-2.5 rounded-xl w-2/3 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+                        />
+                        <button onClick={() => removeField(field.id)} className="text-slate-400 dark:text-slate-500 hover:text-red-500 dark:hover:text-red-400 transition-colors flex-shrink-0">
+                          <TrashIcon className="h-5 w-5" />
+                        </button>
+                    </div>
+                    ))}
+                    <div className="flex items-center space-x-3 pt-2">
+                        <button onClick={addField} className="w-full h-11 flex items-center justify-center text-sm p-2 rounded-full bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors font-semibold">
+                            <PlusIcon className="h-5 w-5 mr-1" />
+                            添加项目
+                        </button>
+                        {node.type === NodeType.SETTING && (
+                            <button 
+                                onClick={onExpand}
+                                disabled={isAnyTaskRunning}
+                                className="w-full h-11 flex items-center justify-center text-sm p-2 rounded-full bg-purple-600 hover:bg-purple-500 text-white transition-colors disabled:bg-slate-500 disabled:cursor-not-allowed font-semibold"
+                            >
+                                {isExpandingThisNode ? (
+                                    <ProgressDisplay progress={progress} />
+                                ) : (
+                                    <>
+                                        <SparklesIcon className="h-5 w-5 mr-1" />
+                                        AI 扩展
+                                    </>
+                                )}
+                            </button>
                         )}
-                    </button>
-                )}
+                    </div>
+                </div>
             </div>
         </div>
-      )}
     </>
   );
 };
@@ -244,15 +263,22 @@ const WorkNode: React.FC<{
     isAnalyzingThisNode: boolean,
     progress: number,
 }> = ({ node, onUpdateData, onAnalyze, isCollapsed, isAnyTaskRunning, isAnalyzingThisNode, progress }) => {
+    const [isEditingTitle, setIsEditingTitle] = useState(false);
+    const titleInputRef = useRef<HTMLInputElement>(null);
+
+    useEffect(() => {
+        if (isEditingTitle) {
+            titleInputRef.current?.focus();
+            titleInputRef.current?.select();
+        }
+    }, [isEditingTitle]);
     
     const handleDataChange = (field: keyof WorkNodeData, value: string | 'reference' | 'imitation' | '套作') => {
         const newData: WorkNodeData = { ...node.data, [field]: value as any };
         if (field === 'mode') {
             if (value === 'parody') {
-                // Set default level when switching to parody mode
                 newData.parodyLevel = node.data.parodyLevel || 'reference';
             } else {
-                // Clear level when switching away
                 delete newData.parodyLevel;
             }
         }
@@ -262,102 +288,108 @@ const WorkNode: React.FC<{
 
     return (
         <>
-            <div className="bg-emerald-700 p-2 rounded-t-lg flex items-center text-white">
-                <BookOpenIcon className="h-5 w-5 mr-2" />
+            <div 
+                className="bg-emerald-200 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-200 p-4 rounded-t-3xl flex items-center node-drag-handle" 
+                style={{ cursor: 'grab' }}
+                onDoubleClick={() => setIsEditingTitle(true)}
+            >
+                <BookOpenIcon className="h-6 w-6 mr-3 flex-shrink-0" />
                 <input
+                    ref={titleInputRef}
                     type="text"
                     value={node.data.title}
                     onChange={(e) => handleDataChange('title', e.target.value)}
-                    className="bg-transparent font-bold w-5/6 focus:outline-none focus:ring-1 focus:ring-white rounded px-1"
+                    onBlur={() => setIsEditingTitle(false)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                    draggable="false"
+                    className={`bg-transparent text-lg font-bold w-full focus:outline-none focus:ring-1 focus:ring-emerald-500/50 rounded-lg px-2 py-1 -ml-2 ${!isEditingTitle ? 'pointer-events-none' : ''}`}
                     placeholder="导入的作品"
-                    {...stopPropagationEvents}
                 />
             </div>
-            {!isCollapsed && (
-                <div className="p-3 space-y-3">
-                    <textarea
-                        placeholder="在此处粘贴您的作品..."
-                        value={node.data.content}
-                        onChange={(e) => handleDataChange('content', e.target.value)}
-                        className="w-full bg-gray-200 dark:bg-gray-700 text-sm p-2 rounded focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-y transition-colors"
-                        rows={8}
-                        {...stopPropagationEvents}
-                    />
-                    <div className="flex w-full bg-gray-200 dark:bg-gray-800 rounded-md p-1 space-x-1" {...stopPropagationEvents}>
-                        <button 
-                            onClick={() => handleDataChange('mode', 'rewrite')}
-                            className={`w-full text-center text-sm px-2 py-1 rounded transition-colors font-medium ${node.data.mode === 'rewrite' ? 'bg-emerald-600 text-white shadow' : 'hover:bg-gray-300 dark:hover:bg-gray-700'}`}
-                        >
-                            改写
-                        </button>
-                        <button 
-                            onClick={() => handleDataChange('mode', 'continue')}
-                            className={`w-full text-center text-sm px-2 py-1 rounded transition-colors font-medium ${node.data.mode === 'continue' ? 'bg-emerald-600 text-white shadow' : 'hover:bg-gray-300 dark:hover:bg-gray-700'}`}
-                        >
-                            续写
-                        </button>
-                        <button 
-                            onClick={() => handleDataChange('mode', 'parody')}
-                            className={`w-full text-center text-sm px-2 py-1 rounded transition-colors font-medium ${node.data.mode === 'parody' ? 'bg-emerald-600 text-white shadow' : 'hover:bg-gray-300 dark:hover:bg-gray-700'}`}
-                        >
-                            仿写
-                        </button>
-                    </div>
-
-                    {node.data.mode === 'parody' && (
-                        <div className="pt-2">
-                            <label className="block text-xs font-medium text-gray-500 dark:text-gray-300 mb-1">仿写程度:</label>
-                            <div className="flex w-full bg-gray-200 dark:bg-gray-800 rounded-md p-1 space-x-1" {...stopPropagationEvents}>
-                                <button 
-                                    onClick={() => handleDataChange('parodyLevel', 'reference')}
-                                    className={`w-full text-center text-xs px-2 py-1 rounded transition-colors font-medium ${node.data.parodyLevel === 'reference' ? 'bg-emerald-600 text-white shadow' : 'hover:bg-gray-300 dark:hover:bg-gray-700'}`}
+            <div className={`grid transition-[grid-template-rows] duration-200 ease-in-out`} style={{ gridTemplateRows: isCollapsed ? '0fr' : '1fr' }}>
+                <div className="overflow-hidden">
+                    <div className="p-4 space-y-4">
+                        <textarea
+                            placeholder="在此处粘贴您的作品..."
+                            value={node.data.content}
+                            onChange={(e) => handleDataChange('content', e.target.value)}
+                            draggable="false"
+                            className="w-full bg-slate-200 dark:bg-slate-700/50 text-sm p-3 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-y transition-colors"
+                            rows={8}
+                        />
+                        <div className="flex w-full bg-slate-200 dark:bg-slate-800/80 rounded-full p-1 space-x-1">
+                            {(['rewrite', 'continue', 'parody'] as const).map(mode => (
+                                <button
+                                    key={mode}
+                                    onClick={() => handleDataChange('mode', mode)}
+                                    className={`w-full text-center text-sm px-2 py-2 rounded-full transition-all duration-300 font-semibold ${node.data.mode === mode ? 'bg-emerald-500 text-white shadow-md' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-300/70 dark:hover:bg-slate-700/70'}`}
                                 >
-                                    参考
+                                    {mode === 'rewrite' ? '改写' : mode === 'continue' ? '续写' : '仿写'}
                                 </button>
-                                <button 
-                                    onClick={() => handleDataChange('parodyLevel', 'imitation')}
-                                    className={`w-full text-center text-xs px-2 py-1 rounded transition-colors font-medium ${node.data.parodyLevel === 'imitation' ? 'bg-emerald-600 text-white shadow' : 'hover:bg-gray-300 dark:hover:bg-gray-700'}`}
-                                >
-                                    模仿
-                                </button>
-                                <button 
-                                    onClick={() => handleDataChange('parodyLevel', '套作')}
-                                    className={`w-full text-center text-xs px-2 py-1 rounded transition-colors font-medium ${node.data.parodyLevel === '套作' ? 'bg-emerald-600 text-white shadow' : 'hover:bg-gray-300 dark:hover:bg-gray-700'}`}
-                                >
-                                    套作
-                                </button>
-                            </div>
+                            ))}
                         </div>
-                    )}
 
-                    {node.data.mode === 'rewrite' && (
-                        <button 
-                            onClick={onAnalyze} 
-                            disabled={isAnyTaskRunning || !node.data.content}
-                            className="w-full flex items-center justify-center text-sm p-2 mt-1 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white transition-colors disabled:bg-gray-500 disabled:cursor-not-allowed"
-                        >
-                            {isAnalyzingThisNode ? <ProgressDisplay progress={progress} /> : 'AI 解析生成节点'}
-                        </button>
-                    )}
+                        {node.data.mode === 'parody' && (
+                            <div className="pt-2">
+                                <label className="block text-sm font-medium text-slate-500 dark:text-slate-300 mb-2">仿写程度:</label>
+                                <div className="flex w-full bg-slate-200 dark:bg-slate-800/80 rounded-full p-1 space-x-1">
+                                    {(['reference', 'imitation', '套作'] as const).map(level => (
+                                         <button
+                                            key={level}
+                                            onClick={() => handleDataChange('parodyLevel', level)}
+                                            className={`w-full text-center text-xs px-2 py-2 rounded-full transition-all duration-300 font-semibold ${node.data.parodyLevel === level ? 'bg-emerald-500 text-white shadow-md' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-300/70 dark:hover:bg-slate-700/70'}`}
+                                        >
+                                            {level === 'reference' ? '参考' : level === 'imitation' ? '模仿' : '套作'}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {node.data.mode === 'rewrite' && (
+                            <button 
+                                onClick={onAnalyze} 
+                                disabled={isAnyTaskRunning || !node.data.content}
+                                className="w-full h-11 flex items-center justify-center text-sm p-2 mt-1 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white transition-colors disabled:bg-slate-500 disabled:cursor-not-allowed font-semibold"
+                            >
+                                {isAnalyzingThisNode ? <ProgressDisplay progress={progress} /> : 'AI 解析生成节点'}
+                            </button>
+                        )}
+                    </div>
                 </div>
-            )}
+            </div>
         </>
     );
 };
 
 
-const NodeComponent: React.FC<NodeComponentProps> = ({ node, onUpdateData, onDeleteNode, onToggleNodeCollapse, onAnalyzeWork, onExpandSetting, connectableTargetType, activeProgressTask, progress = 0 }) => {
+const NodeComponent: React.FC<NodeComponentProps> = ({ node, onUpdateData, onDeleteNode, onToggleNodeCollapse, onAnalyzeWork, onExpandSetting, connectableTargetType, activeProgressTask, progress = 0, isDragging = false, highlightedNodeId }) => {
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const handleDelete = () => {
+    setIsDeleting(true);
+    setTimeout(() => {
+        onDeleteNode(node.id);
+    }, 200); // Animation duration
+  };
+
   const renderNodeContent = () => {
     const isAnyTaskRunning = !!activeProgressTask;
+    const headerColors = {
+        CHARACTER: "bg-indigo-200 text-indigo-900 dark:bg-indigo-950 dark:text-indigo-200",
+        SETTING: "bg-purple-200 text-purple-900 dark:bg-purple-950 dark:text-purple-200",
+        ENVIRONMENT: "bg-green-200 text-green-900 dark:bg-green-950 dark:text-green-200"
+    };
+
     switch (node.type) {
       case NodeType.PLOT:
         return <PlotNode node={node as Node<PlotNodeData>} onUpdateData={(data) => onUpdateData(node.id, data)} isCollapsed={node.isCollapsed} />;
       case NodeType.CHARACTER:
-        return <EditableNode node={node as Node<CharacterNodeData>} onUpdateData={(data) => onUpdateData(node.id, data)} headerColor="bg-indigo-700" isCollapsed={node.isCollapsed} isAnyTaskRunning={isAnyTaskRunning} isExpandingThisNode={false} progress={0} />;
+        return <EditableNode node={node as Node<CharacterNodeData>} onUpdateData={(data) => onUpdateData(node.id, data)} headerColor={headerColors.CHARACTER} isCollapsed={node.isCollapsed} isAnyTaskRunning={isAnyTaskRunning} isExpandingThisNode={false} progress={0} />;
       case NodeType.SETTING:
-        return <EditableNode node={node as Node<SettingNodeData>} onUpdateData={(data) => onUpdateData(node.id, data)} headerColor="bg-purple-700" onExpand={() => onExpandSetting?.(node.id)} isCollapsed={node.isCollapsed} isAnyTaskRunning={isAnyTaskRunning} isExpandingThisNode={activeProgressTask === `expand_${node.id}`} progress={progress} />;
+        return <EditableNode node={node as Node<SettingNodeData>} onUpdateData={(data) => onUpdateData(node.id, data)} headerColor={headerColors.SETTING} onExpand={() => onExpandSetting?.(node.id)} isCollapsed={node.isCollapsed} isAnyTaskRunning={isAnyTaskRunning} isExpandingThisNode={activeProgressTask === `expand_${node.id}`} progress={progress} />;
       case NodeType.ENVIRONMENT:
-        return <EditableNode node={node as Node<EnvironmentNodeData>} onUpdateData={(data) => onUpdateData(node.id, data)} headerColor="bg-green-700" isCollapsed={node.isCollapsed} isAnyTaskRunning={isAnyTaskRunning} isExpandingThisNode={false} progress={0} />;
+        return <EditableNode node={node as Node<EnvironmentNodeData>} onUpdateData={(data) => onUpdateData(node.id, data)} headerColor={headerColors.ENVIRONMENT} isCollapsed={node.isCollapsed} isAnyTaskRunning={isAnyTaskRunning} isExpandingThisNode={false} progress={0} />;
       case NodeType.STYLE:
         return <StyleNode node={node as Node<StyleNodeData>} onUpdateData={(data) => onUpdateData(node.id, data)} isCollapsed={node.isCollapsed} />;
       case NodeType.STRUCTURE:
@@ -370,38 +402,38 @@ const NodeComponent: React.FC<NodeComponentProps> = ({ node, onUpdateData, onDel
   };
 
   const renderSourceHandles = () => {
-    const baseHandleClasses = "absolute -right-2 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full border-2 border-white dark:border-gray-800 cursor-crosshair";
-    const flowHandleColor = "bg-cyan-500 dark:bg-cyan-400 hover:bg-cyan-400 dark:hover:bg-cyan-300";
+    const baseHandleClasses = "absolute -right-2.5 top-1/2 -translate-y-1/2 w-5 h-5 border-2 border-white dark:border-slate-800 cursor-crosshair transition-transform hover:scale-125";
+    const flowHandleColor = "bg-blue-500 dark:bg-blue-400";
 
     switch (node.type) {
         case NodeType.STYLE:
-            return <div data-handle="source" className="absolute -right-2 top-1/2 -translate-y-1/2 w-4 h-4 bg-pink-500 dark:bg-pink-400 rounded-sm border-2 border-white dark:border-gray-800 cursor-crosshair hover:bg-pink-400 dark:hover:bg-pink-300" />;
+            return <div data-handle="source" className={`${baseHandleClasses} ${"bg-pink-500 dark:bg-pink-400"} rounded-md`} />;
         
         case NodeType.SETTING:
             const data = node.data as SettingNodeData;
             if (data.narrativeStructure === 'single' || node.isCollapsed) {
-                return <div data-handle="source" className={`${baseHandleClasses} ${flowHandleColor}`} />;
+                return <div data-handle="source" className={`${baseHandleClasses} ${flowHandleColor} rounded-full`} />;
             }
-            const handleBColor = data.narrativeStructure === 'light_dark' ? 'bg-gray-500 hover:bg-gray-400' : `${flowHandleColor}`;
+            const handleBColor = data.narrativeStructure === 'light_dark' ? 'bg-slate-500' : `${flowHandleColor}`;
             return <>
-                <div data-handle="source" data-handle-id="source_a" className={`absolute -right-2 top-1/3 -translate-y-1/2 w-4 h-4 ${flowHandleColor} rounded-full border-2 border-white dark:border-gray-800 cursor-crosshair`} title="故事线 A / 明线" />
-                <div data-handle="source" data-handle-id="source_b" className={`absolute -right-2 top-2/3 -translate-y-1/2 w-4 h-4 ${handleBColor} rounded-full border-2 border-white dark:border-gray-800 cursor-crosshair`} title="故事线 B / 暗线" />
+                <div data-handle="source" data-handle-id="source_a" className={`absolute -right-2.5 top-1/3 -translate-y-1/2 w-5 h-5 ${flowHandleColor} rounded-full border-2 border-white dark:border-slate-800 cursor-crosshair transition-transform hover:scale-125`} title="故事线 A / 明线" />
+                <div data-handle="source" data-handle-id="source_b" className={`absolute -right-2.5 top-2/3 -translate-y-1/2 w-5 h-5 ${handleBColor} rounded-full border-2 border-white dark:border-slate-800 cursor-crosshair transition-transform hover:scale-125`} title="故事线 B / 暗线" />
             </>;
 
         case NodeType.PLOT:
         case NodeType.CHARACTER:
         case NodeType.ENVIRONMENT:
-             return <div data-handle="source" className={`${baseHandleClasses} ${flowHandleColor}`} />;
+             return <div data-handle="source" className={`${baseHandleClasses} ${flowHandleColor} rounded-full`} />;
         
         case NodeType.WORK:
             if ((node.data as WorkNodeData).mode === 'parody') {
-                return <div data-handle="source" className="absolute -right-2 top-1/2 -translate-y-1/2 w-4 h-4 bg-pink-500 dark:bg-pink-400 rounded-sm border-2 border-white dark:border-gray-800 cursor-crosshair hover:bg-pink-400 dark:hover:bg-pink-300" />;
+                return <div data-handle="source" className={`${baseHandleClasses} ${"bg-pink-500 dark:bg-pink-400"} rounded-md`} />;
             }
-            return <div data-handle="source" className={`${baseHandleClasses} ${flowHandleColor}`} />;
+            return <div data-handle="source" className={`${baseHandleClasses} ${flowHandleColor} rounded-full`} />;
         
         case NodeType.STRUCTURE:
             if ((node.data as StructureNodeData).category === StructureCategory.STARTING) {
-                return <div data-handle="source" className={`${baseHandleClasses} ${flowHandleColor}`} />;
+                return <div data-handle="source" className={`${baseHandleClasses} ${flowHandleColor} rounded-full`} />;
             }
             return null; // End nodes have no source
 
@@ -413,33 +445,30 @@ const NodeComponent: React.FC<NodeComponentProps> = ({ node, onUpdateData, onDel
     const isFlowConnectable = connectableTargetType === 'flow';
     const isStyleConnectable = connectableTargetType === 'style';
 
-    const baseTargetClasses = "absolute -left-4 top-1/2 -translate-y-1/2 w-8 h-8 cursor-crosshair flex items-center justify-center group";
-    const flowTargetColor = "bg-emerald-500 dark:bg-emerald-400 group-hover:bg-emerald-400 dark:group-hover:bg-emerald-300";
-    const styleTargetColor = "bg-pink-500 dark:bg-pink-400 group-hover:bg-pink-400 dark:group-hover:bg-pink-300";
+    const baseTargetClasses = "absolute -left-5 top-1/2 -translate-y-1/2 w-10 h-10 cursor-crosshair flex items-center justify-center group";
+    const flowTargetColor = "bg-emerald-500 dark:bg-emerald-400";
+    const styleTargetColor = "bg-pink-500 dark:bg-pink-400";
 
     switch (node.type) {
         case NodeType.PLOT:
              if (node.isCollapsed) {
                 return <div data-handle="target" data-handle-id="flow" title="流程/风格" className={`${baseTargetClasses}`}>
-                    <div className="w-4 h-4 bg-gray-400 rounded-md border-2 border-white dark:border-gray-800 pointer-events-none" />
+                    <div className="w-5 h-5 bg-slate-400 rounded-lg border-2 border-white dark:border-slate-800 pointer-events-none" />
                 </div>
              }
             return <>
-                <div data-handle="target" data-handle-id="flow" title="流程" className="absolute -left-4 top-1/3 -translate-y-1/2 w-8 h-8 cursor-crosshair flex items-center justify-center group">
-                    {isFlowConnectable && <div className="absolute w-full h-full rounded-full border-2 border-dashed border-gray-600 dark:border-white animate-pulse pointer-events-none" />}
-                    <div className={`w-4 h-4 ${flowTargetColor} rounded-full border-2 border-white dark:border-gray-800 pointer-events-none`} />
+                <div data-handle="target" data-handle-id="flow" title="流程" className="absolute -left-5 top-1/3 -translate-y-1/2 w-10 h-10 cursor-crosshair flex items-center justify-center group">
+                    <div className={`w-5 h-5 ${flowTargetColor} rounded-full border-2 border-white dark:border-slate-800 pointer-events-none group-hover:scale-125 transition-transform ${isFlowConnectable ? 'scale-125 ring-2 ring-emerald-400' : ''}`} />
                 </div>
-                <div data-handle="target" data-handle-id="style" title="风格" className="absolute -left-4 top-2/3 -translate-y-1/2 w-8 h-8 cursor-crosshair flex items-center justify-center group">
-                    {isStyleConnectable && <div className="absolute w-full h-full rounded-full border-2 border-dashed border-gray-600 dark:border-white animate-pulse pointer-events-none" />}
-                    <div className={`w-4 h-4 ${styleTargetColor} rounded-sm border-2 border-white dark:border-gray-800 pointer-events-none`} />
+                <div data-handle="target" data-handle-id="style" title="风格" className="absolute -left-5 top-2/3 -translate-y-1/2 w-10 h-10 cursor-crosshair flex items-center justify-center group">
+                    <div className={`w-5 h-5 ${styleTargetColor} rounded-md border-2 border-white dark:border-slate-800 pointer-events-none group-hover:scale-125 transition-transform ${isStyleConnectable ? 'scale-125 ring-2 ring-pink-400' : ''}`} />
                 </div>
             </>;
         
         case NodeType.SETTING:
              return (
                 <div data-handle="target" data-handle-id="style" title="风格" className={baseTargetClasses}>
-                    {isStyleConnectable && <div className="absolute w-full h-full rounded-full border-2 border-dashed border-gray-600 dark:border-white animate-pulse pointer-events-none" />}
-                    <div className={`w-4 h-4 ${styleTargetColor} rounded-sm border-2 border-white dark:border-gray-800 pointer-events-none`} />
+                    <div className={`w-5 h-5 ${styleTargetColor} rounded-md border-2 border-white dark:border-slate-800 pointer-events-none group-hover:scale-125 transition-transform ${isStyleConnectable ? 'scale-125 ring-2 ring-pink-400' : ''}`} />
                 </div>
              );
         
@@ -448,8 +477,7 @@ const NodeComponent: React.FC<NodeComponentProps> = ({ node, onUpdateData, onDel
         case NodeType.ENVIRONMENT:
             return (
                 <div data-handle="target" data-handle-id="flow" title="流程" className={baseTargetClasses}>
-                    {isFlowConnectable && <div className="absolute w-full h-full rounded-full border-2 border-dashed border-gray-600 dark:border-white animate-pulse pointer-events-none" />}
-                    <div className={`w-4 h-4 ${flowTargetColor} rounded-full border-2 border-white dark:border-gray-800 pointer-events-none`} />
+                    <div className={`w-5 h-5 ${flowTargetColor} rounded-full border-2 border-white dark:border-slate-800 pointer-events-none group-hover:scale-125 transition-transform ${isFlowConnectable ? 'scale-125 ring-2 ring-emerald-400' : ''}`} />
                 </div>
             );
 
@@ -460,29 +488,28 @@ const NodeComponent: React.FC<NodeComponentProps> = ({ node, onUpdateData, onDel
 
   return (
     <div 
-      className="bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 w-80 absolute select-none transition-colors duration-300"
+      className="w-80 absolute select-none pointer-events-auto"
       style={{
         transform: `translate(${node.position.x}px, ${node.position.y}px)`,
       }}
       data-node-id={node.id}
     >
-        <div 
-          className="node-drag-handle"
-          style={{ cursor: 'grab' }}
-        >
-          <div className="node-content-wrapper relative">
-              <button onClick={() => onDeleteNode(node.id)} className="absolute -top-2 -right-2 bg-red-600 text-white rounded-full p-0.5 hover:bg-red-500 z-10 transition-transform hover:scale-110">
-                  <XIcon className="h-3 w-3"/>
-              </button>
-              {renderNodeContent()}
-               <button onClick={() => onToggleNodeCollapse(node.id)} className="absolute -bottom-2 -right-2 bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-200 rounded-full p-0.5 hover:bg-gray-400 dark:hover:bg-gray-500 z-10 transition-transform hover:scale-110">
-                  {node.isCollapsed ? <ChevronDownIcon className="h-3 w-3"/> : <ChevronUpIcon className="h-3 w-3" />}
-              </button>
-          </div>
+      <div 
+        className={`bg-white/70 dark:bg-slate-800/70 backdrop-blur-md rounded-3xl shadow-lg border border-slate-200 dark:border-slate-700/80 relative hover:shadow-2xl ${isDeleting ? 'animate-scale-out' : ''} ${!isDragging ? 'transition-all duration-300' : ''} ${highlightedNodeId === node.id ? 'node-highlight' : ''}`}
+      >
+        <div className="node-content-wrapper relative">
+            <button onClick={handleDelete} className="absolute -top-2.5 -right-2.5 w-7 h-7 flex items-center justify-center bg-slate-300 dark:bg-slate-600 text-slate-700 dark:text-slate-200 rounded-full hover:bg-red-500 hover:text-white dark:hover:bg-red-500 z-10 transition-all duration-200 hover:scale-110">
+                <XIcon className="h-4 w-4"/>
+            </button>
+            {renderNodeContent()}
+            <button onClick={() => onToggleNodeCollapse(node.id)} className="absolute -bottom-2.5 -right-2.5 w-7 h-7 flex items-center justify-center bg-slate-300 dark:bg-slate-600 text-slate-700 dark:text-slate-200 rounded-full hover:bg-slate-400 dark:hover:bg-slate-500 z-10 transition-all duration-200 hover:scale-110">
+                {node.isCollapsed ? <ChevronDownIcon className="h-4 w-4"/> : <ChevronUpIcon className="h-4 w-4" />}
+            </button>
         </div>
       
         {renderSourceHandles()}
         {renderTargetHandles()}
+      </div>
     </div>
   );
 };

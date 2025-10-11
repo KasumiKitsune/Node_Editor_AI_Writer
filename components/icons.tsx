@@ -157,9 +157,28 @@ export const DocumentDiffIcon: React.FC<React.SVGProps<SVGSVGElement>> = ({ clas
   </svg>
 );
 
+export const LightningBoltIcon: React.FC<React.SVGProps<SVGSVGElement>> = ({ className, ...props }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" className={className || "h-6 w-6"} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} {...props}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+    </svg>
+);
+
+export const LightbulbIcon: React.FC<React.SVGProps<SVGSVGElement>> = ({ className, ...props }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" className={className || "h-6 w-6"} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} {...props}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+    </svg>
+);
+
+export const BrainIcon: React.FC<React.SVGProps<SVGSVGElement>> = ({ className, ...props }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" className={className || "h-6 w-6"} height="24px" viewBox="0 -960 960 960" width="24px" fill="currentColor" {...props}>
+        <path d="M390-120q-51 0-88-35.5T260-241q-60-8-100-53t-40-106q0-21 5.5-41.5T142-480q-11-18-16.5-38t-5.5-42q0-61 40-105.5t99-52.5q3-51 41-86.5t90-35.5q26 0 48.5 10t41.5 27q18-17 41-27t49-10q52 0 89.5 35t40.5 86q59 8 99.5 53T840-560q0 22-5.5 42T818-480q11 18 16.5 38.5T840-400q0 62-40.5 106.5T699-241q-5 50-41.5 85.5T570-120q-25 0-48.5-9.5T480-156q-19 17-42 26.5t-48 9.5Zm130-590v460q0 21 14.5 35.5T570-200q20 0 34.5-16t15.5-36q-21-8-38.5-21.5T550-306q-10-14-7.5-30t16.5-26q14-10 30-7.5t26 16.5q11 16 28 24.5t37 8.5q33 0 56.5-23.5T760-400q0-5-.5-10t-2.5-10q-17 10-36.5 15t-40.5 5q-17 0-28.5-11.5T640-440q0-17 11.5-28.5T680-480q33 0 56.5-23.5T760-560q0-33-23.5-56T680-640q-11 18-28.5 31.5T613-587q-16 6-31-1t-20-23q-5-16 1.5-31t22.5-20q15-5 24.5-18t9.5-30q0-21-14.5-35.5T570-760q-21 0-35.5 14.5T520-710Zm-80 460v-460q0-21-14.5-35.5T390-760q-21 0-35.5 14.5T340-710q0 16 9 29.5t24 18.5q16 5 23 20t2 31q-6 16-21 23t-31 1q-21-8-38.5-21.5T279-640q-32 1-55.5 24.5T200-560q0 33 23.5 56.5T280-480q17 0 28.5 11.5T320-440q0 17-11.5 28.5T280-400q-21 0-40.5-5T203-420q-2 5-2.5 10t-.5 10q0 33 23.5 56.5T280-320q20 0 37-8.5t28-24.5q10-14 26-16.5t30 7.5q14 10 16.5 26t-7.5 30q-14 19-32 33t-39 22q1 20 16 35.5t35 15.5q21 0 35.5-14.5T440-250Zm40-230Z"/>
+    </svg>
+);
+
 export interface CustomSelectOption {
   value: string;
   label: string;
+  icon?: React.ReactNode;
 }
 
 interface CustomSelectProps {
@@ -173,7 +192,7 @@ interface CustomSelectProps {
 export const CustomSelect: React.FC<CustomSelectProps> = ({ options, value, onChange, id, disabled = false }) => {
   const [isOpen, setIsOpen] = useState(false);
   const selectRef = useRef<HTMLDivElement>(null);
-  const selectedLabel = options.find(opt => opt.value === value)?.label || options[0]?.label;
+  const selectedOption = options.find(opt => opt.value === value) || options[0];
 
   const handleToggle = () => {
     if (!disabled) setIsOpen(!isOpen);
@@ -193,9 +212,9 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({ options, value, onCh
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const baseClasses = "w-full bg-gray-200 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-sm rounded-lg flex items-center justify-between p-2 transition-colors";
-  const focusClasses = "focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500";
-  const disabledClasses = "disabled:bg-gray-300 dark:disabled:bg-gray-800 disabled:cursor-not-allowed disabled:text-gray-500";
+  const baseClasses = "w-full bg-slate-200 dark:bg-slate-700/50 text-slate-800 dark:text-slate-200 text-sm rounded-full flex items-center justify-between p-2.5 transition-colors duration-200";
+  const focusClasses = "focus:ring-2 focus:ring-blue-500/80 focus:outline-none";
+  const disabledClasses = "disabled:bg-slate-300 dark:disabled:bg-slate-800 disabled:cursor-not-allowed disabled:text-slate-500";
 
   return (
     <div className="relative w-full" ref={selectRef}>
@@ -206,21 +225,50 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({ options, value, onCh
         disabled={disabled}
         className={`${baseClasses} ${!disabled ? focusClasses : ''} ${disabledClasses}`}
       >
-        <span className="truncate">{selectedLabel}</span>
-        <ChevronDownIcon className={`h-4 w-4 transform transition-transform duration-200 ml-2 flex-shrink-0 ${isOpen ? 'rotate-180' : ''}`} />
+        <span className="truncate pl-2 flex items-center">
+            {selectedOption?.icon}
+            {selectedOption?.label}
+        </span>
+        <ChevronDownIcon className={`h-5 w-5 transform transition-transform duration-300 ease-out flex-shrink-0 ${isOpen ? 'rotate-180' : ''}`} />
       </button>
       {isOpen && (
-        <div className="absolute z-20 mt-1 w-full bg-white dark:bg-gray-800 rounded-md shadow-lg border border-gray-200 dark:border-gray-700 max-h-60 overflow-auto animate-fade-in-up" style={{ animationDuration: '150ms'}}>
-          <ul className="py-1">
-            {options.map(option => (
-              <li
-                key={option.value}
-                onClick={() => handleSelect(option.value)}
-                className="px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer"
-              >
-                {option.label}
-              </li>
-            ))}
+        <div 
+            className="absolute z-20 mt-2 w-full bg-slate-50 dark:bg-slate-800 rounded-2xl shadow-lg border border-slate-200 dark:border-slate-700 max-h-60 overflow-auto animate-scale-in" 
+            style={{ animationDuration: '150ms'}}
+        >
+          <ul className="p-2 space-y-1">
+            {options.map(option => {
+              const isSelected = value === option.value;
+              
+              let iconDisplay = option.icon;
+              if (isSelected && option.icon && React.isValidElement(option.icon)) {
+                // FIX: Cast props to a type with an optional className to resolve the 'unknown' type error.
+                const originalClassName = (option.icon.props as { className?: string }).className || '';
+                const newClassName = originalClassName
+                    .split(' ')
+                    .filter((cls: string) => !cls.startsWith('text-'))
+                    .join(' ') + ' text-white';
+                
+                iconDisplay = React.cloneElement(option.icon as React.ReactElement<any>, {
+                    className: newClassName.trim()
+                });
+              }
+
+              return (
+                <li
+                  key={option.value}
+                  onClick={() => handleSelect(option.value)}
+                  className={`flex items-center px-3 py-2 text-sm rounded-xl cursor-pointer transition-colors duration-150 ${
+                      isSelected 
+                      ? 'bg-blue-500 text-white' 
+                      : 'text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                  }`}
+                >
+                  {iconDisplay}
+                  {option.label}
+                </li>
+              );
+            })}
           </ul>
         </div>
       )}

@@ -21,7 +21,7 @@ export const renderLineWithInlineFormatting = (line: string): React.ReactNode =>
   
   return parts.filter(part => part).map((part, index) => {
     if (part.startsWith('`') && part.endsWith('`')) {
-      return <code key={index} className="bg-gray-200 dark:bg-gray-700 text-red-600 dark:text-red-400 rounded px-1.5 py-0.5 text-sm font-mono">{part.slice(1, -1)}</code>;
+      return <code key={index} className="bg-slate-200 dark:bg-slate-700 text-red-600 dark:text-red-400 rounded-md px-1.5 py-0.5 text-sm font-mono">{part.slice(1, -1)}</code>;
     }
     if (part.startsWith('**') && part.endsWith('**')) {
       return <strong key={index}>{part.slice(2, -2)}</strong>;
@@ -63,9 +63,9 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, className,
       // This approach correctly handles dynamic HTML tags and also fixes a bug with incorrect CSS class assignments for headings.
       const headingTag = `h${level}` as "h1" | "h2" | "h3";
       const headingClasses = [
-        "font-bold mt-4 mb-2 text-2xl border-b border-gray-300 dark:border-gray-600 pb-2", // h1
-        "font-bold mt-4 mb-2 text-xl border-b border-gray-200 dark:border-gray-700 pb-1", // h2
-        "font-bold mt-4 mb-2 text-lg", // h3
+        "font-bold mt-8 mb-4 text-4xl border-b border-slate-300 dark:border-slate-700 pb-2", // h1
+        "font-bold mt-6 mb-3 text-2xl border-b border-slate-200 dark:border-slate-800 pb-2", // h2
+        "font-bold mt-5 mb-2 text-xl", // h3
       ];
 
       elements.push(
@@ -80,7 +80,7 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, className,
     
     // Horizontal Rule
     if (line.match(/^(\*|-|_){3,}$/)) {
-        elements.push(<hr key={i} className="my-6 border-gray-300 dark:border-gray-600" />);
+        elements.push(<hr key={i} className="my-8 border-slate-300 dark:border-slate-700" />);
         i++; continue;
     }
 
@@ -92,7 +92,7 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, className,
             i++;
         }
         elements.push(
-            <blockquote key={i} className="border-l-4 border-gray-400 dark:border-gray-500 pl-4 my-4 text-gray-500 dark:text-gray-400 italic">
+            <blockquote key={i} className="border-l-4 border-slate-400 dark:border-slate-600 pl-4 my-4 text-slate-500 dark:text-slate-400 italic">
                 {blockquoteLines.map((l, idx) => <p key={idx}>{renderLineWithInlineFormatting(l)}</p>)}
             </blockquote>
         );
@@ -107,7 +107,7 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, className,
         codeLines.push(lines[i]);
         i++;
       }
-      elements.push(<pre key={i} className="bg-gray-100 dark:bg-gray-900 p-4 rounded-md my-4 overflow-x-auto"><code className="text-sm font-mono text-cyan-700 dark:text-cyan-300">{codeLines.join('\n')}</code></pre>);
+      elements.push(<pre key={i} className="bg-slate-100 dark:bg-slate-900/80 p-4 rounded-xl my-4 overflow-x-auto"><code className="text-sm font-mono text-blue-700 dark:text-blue-300">{codeLines.join('\n')}</code></pre>);
       i++; // Move past the closing ```
       continue;
     }
@@ -143,7 +143,7 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, className,
             paraLines.push(lines[i]);
             i++;
         }
-        elements.push(<p key={i-1} className="my-2 leading-relaxed paragraph-indent">{renderLineWithInlineFormatting(paraLines.join('\n'))}</p>);
+        elements.push(<p key={i-1} className="my-3 leading-relaxed text-base paragraph-indent">{renderLineWithInlineFormatting(paraLines.join('\n'))}</p>);
         continue;
     }
     

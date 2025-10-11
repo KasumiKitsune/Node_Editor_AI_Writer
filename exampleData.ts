@@ -23,7 +23,7 @@ export const generalExample: { nodes: Node[], edges: Edge[] } = {
       data: {
         title: "卡珊德拉船长",
         fields: [
-          { id: 'f1', key: '姓名', value: '卡珊德ら' },
+          { id: 'f1', key: '姓名', value: '卡珊德拉' },
           { id: 'f2', key: '职业', value: '星际探险家' },
           { id: 'f3', key: '性格', value: '好奇、坚韧' }
         ]

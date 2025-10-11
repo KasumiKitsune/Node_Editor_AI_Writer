@@ -14,7 +14,7 @@ import ResultModals from './components/ResultModals';
 import { useProgress } from './hooks/useProgress';
 // FIX: Added Modal and DownloadIcon to imports to resolve reference errors.
 import Modal from './components/Modal';
-import { MenuIcon, XIcon, DownloadIcon, PencilIcon, CheckIcon, DocumentAddIcon, TrashIcon } from './components/icons';
+import { MenuIcon, XIcon, DownloadIcon, PencilIcon, CheckIcon, DocumentAddIcon, TrashIcon, EyeIcon } from './components/icons';
 
 interface Asset {
     type: 'outline' | 'story';
@@ -32,11 +32,11 @@ interface Heading {
 const App: React.FC = () => {
   const [nodes, setNodes] = useState<Node[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
-  const [language, setLanguage] = useState<string>('中文');
-  // FIX: Updated the default model from 'gemini-flash-latest' to 'gemini-2.5-flash' to align with current API guidelines.
   const [model, setModel] = useState<string>('gemini-flash-latest');
   const [theme, setTheme] = useState<'light' | 'dark'>(() => (localStorage.getItem('theme') as 'light' | 'dark') || 'light');
   const [targetWordCount, setTargetWordCount] = useState<string>('');
+  const [transform, setTransform] = useState({ x: 100, y: 100, scale: 1 });
+  const [highlightedNodeId, setHighlightedNodeId] = useState<string | null>(null);
 
   const { progress, progressMessage, activeProgressTask, isAnyTaskRunning, setProgressMessage, startProgress, stopProgress } = useProgress();
 
@@ -63,6 +63,14 @@ const App: React.FC = () => {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const storyContentRef = useRef<HTMLDivElement>(null);
+  const editorRef = useRef<HTMLDivElement>(null);
+  const sidebarRef = useRef<HTMLDivElement>(null);
+  
+  // Sidebar drag state
+  const sidebarWidth = 320; // from w-80
+  const [sidebarDragOffset, setSidebarDragOffset] = useState<number | null>(null);
+  const dragStartRef = useRef<{ x: number, wasOpen: boolean } | null>(null);
+
 
   const currentOutline = outlineHistory[currentOutlineIndex] || null;
   const previousOutline = outlineHistory[currentOutlineIndex - 1] || null;
@@ -100,12 +108,36 @@ const App: React.FC = () => {
     localStorage.setItem('theme', theme);
   }, [theme]);
 
+  useEffect(() => {
+    if (highlightedNodeId) {
+        const timer = setTimeout(() => setHighlightedNodeId(null), 3000);
+        return () => clearTimeout(timer);
+    }
+  }, [highlightedNodeId]);
+
 
   const addNode = useCallback((type: NodeType, data?: any) => {
+    const editor = editorRef.current;
+    const { x: viewX, y: viewY, scale } = transform;
+    let worldX = 0;
+    let worldY = 0;
+
+    if (editor) {
+        const editorRect = editor.getBoundingClientRect();
+        // Calculate the center of the viewport in world coordinates
+        worldX = (editorRect.width / 2 - viewX) / scale;
+        worldY = (editorRect.height / 2 - viewY) / scale;
+    } else {
+        // Fallback if ref is not ready for some reason
+        worldX = (window.innerWidth / 2 - viewX) / scale;
+        worldY = (window.innerHeight / 2 - viewY) / scale;
+    }
+
+
     const newNode: Node = {
       id: `${type}_${Date.now()}`,
       type,
-      position: { x: Math.random() * 400 + 50, y: Math.random() * 300 + 50 },
+      position: { x: worldX - 160, y: worldY - 80 }, // Adjust for node width/height
       data: {} as any,
       isCollapsed: false,
     };
@@ -146,11 +178,15 @@ const App: React.FC = () => {
     }
 
     setNodes(nds => [...nds, newNode]);
-  }, []);
+    setHighlightedNodeId(newNode.id);
+  }, [transform]);
 
   const updateNodeData = useCallback((nodeId: string, data: any) => {
     setNodes(nds => nds.map(n => n.id === nodeId ? { ...n, data } : n));
-  }, []);
+    if (highlightedNodeId && nodeId === highlightedNodeId) {
+        setHighlightedNodeId(null);
+    }
+  }, [highlightedNodeId]);
 
   const deleteNode = useCallback((nodeId: string) => {
     setNodes(nds => nds.filter(n => n.id !== nodeId));
@@ -445,7 +481,7 @@ const App: React.FC = () => {
             stopProgress();
             return;
         }
-        const result = await generateOutline(nodes, edges, language, model, wordCount);
+        const result = await generateOutline(nodes, edges, '中文', model, wordCount);
         stopProgress(() => {
             setOutlineHistory([result]);
             setCurrentOutlineIndex(0);
@@ -472,7 +508,7 @@ const App: React.FC = () => {
         if (isShortForm) {
             startProgress('story', '正在创作短篇故事...');
             try {
-                const finalStory = await generateShortStory(nodes, edges, currentOutline, language, model);
+                const finalStory = await generateShortStory(nodes, edges, currentOutline, '中文', model);
                 stopProgress(() => {
                     setStoryHistory([finalStory]);
                     setCurrentStoryIndex(0);
@@ -502,7 +538,7 @@ const App: React.FC = () => {
                         setProgressMessage(`正在创作第 ${chaptersDone} / ${totalChapters} 章...`);
                         
                         const newChapterText = await generateStoryChapter(
-                            nodes, edges, currentOutline, accumulatedStory, i, j, language, model
+                            nodes, edges, currentOutline, accumulatedStory, i, j, '中文', model
                         );
                         
                         storyParts.push(newChapterText);
@@ -531,7 +567,7 @@ const App: React.FC = () => {
     try {
         const wordCount = parseInt(targetWordCount, 10);
         // Step 1: Generate a temporary short-story outline
-        const tempOutline = await generateOutline(nodes, edges, language, model, wordCount);
+        const tempOutline = await generateOutline(nodes, edges, '中文', model, wordCount);
         
         // This won't be displayed, but stored for context and asset library
         setOutlineHistory([tempOutline]);
@@ -540,7 +576,7 @@ const App: React.FC = () => {
         setProgressMessage('正在创作故事...');
         
         // Step 2: Generate the story from the temporary outline
-        const finalStory = await generateShortStory(nodes, edges, tempOutline, language, model);
+        const finalStory = await generateShortStory(nodes, edges, tempOutline, '中文', model);
 
         stopProgress(() => {
             setStoryHistory([finalStory]);
@@ -578,7 +614,7 @@ const App: React.FC = () => {
         if (!currentOutline || !revisionPrompt.trim()) return;
         startProgress('revise_outline', '正在修改大纲...');
         try {
-            const revisedOutline = await reviseOutline(currentOutline, revisionPrompt, language, model);
+            const revisedOutline = await reviseOutline(currentOutline, revisionPrompt, '中文', model);
             stopProgress(() => {
                 const newHistory = [...outlineHistory.slice(0, currentOutlineIndex + 1), revisedOutline];
                 setOutlineHistory(newHistory);
@@ -612,7 +648,7 @@ const App: React.FC = () => {
         if (!currentStory || !revisionPrompt.trim()) return;
         startProgress('revise_story', '正在修改故事...');
         try {
-            const revisedStory = await reviseStory(currentStory, revisionPrompt, language, model);
+            const revisedStory = await reviseStory(currentStory, revisionPrompt, '中文', model);
             stopProgress(() => {
                 const newHistory = [...storyHistory.slice(0, currentStoryIndex + 1), revisedStory];
                 setStoryHistory(newHistory);
@@ -710,6 +746,7 @@ const App: React.FC = () => {
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
+      // FIX: URL.revokeObjectURL expects the object URL string, not the anchor element.
       URL.revokeObjectURL(url);
   };
   
@@ -764,21 +801,85 @@ const App: React.FC = () => {
         setIsAssetModalOpen(false);
     };
 
+    const handleTouchStart = (e: React.TouchEvent) => {
+        const x = e.targetTouches[0].clientX;
+        const target = e.target as HTMLElement;
+
+        // Check if the touch event originated from within the sidebar
+        const isTouchingSidebar = sidebarRef.current?.contains(target);
+        const isEdgeArea = x < 80;
+
+        if (isSidebarOpen && isTouchingSidebar) {
+            // Only start a close-drag if touching the sidebar itself
+            dragStartRef.current = { x, wasOpen: true };
+        } else if (!isSidebarOpen && isEdgeArea) {
+            // Only start an open-drag if touching the screen edge
+            dragStartRef.current = { x, wasOpen: false };
+            setSidebarDragOffset(-sidebarWidth);
+        } else {
+            dragStartRef.current = null;
+        }
+    };
+
+    const handleTouchMove = (e: React.TouchEvent) => {
+        if (!dragStartRef.current) return;
+        
+        // Prevent default browser actions like scrolling when our drag is active
+        if (e.cancelable) e.preventDefault();
+
+        const x = e.targetTouches[0].clientX;
+        const deltaX = x - dragStartRef.current.x;
+        const startPosition = dragStartRef.current.wasOpen ? 0 : -sidebarWidth;
+        const newPosition = Math.max(-sidebarWidth, Math.min(0, startPosition + deltaX));
+        setSidebarDragOffset(newPosition);
+    };
+
+    const handleTouchEnd = () => {
+        if (dragStartRef.current === null || sidebarDragOffset === null) return;
+        
+        const { wasOpen } = dragStartRef.current;
+        const threshold = sidebarWidth / 4; // Drag distance required to change state
+
+        if (wasOpen) {
+            // If it was open, check if dragged far enough left to close
+            if (sidebarDragOffset < -threshold) {
+                setIsSidebarOpen(false);
+            } else {
+                setIsSidebarOpen(true); // Snap back
+            }
+        } else {
+            // If it was closed, check if dragged far enough right to open
+            if (sidebarDragOffset > -sidebarWidth + threshold) {
+                setIsSidebarOpen(true);
+            } else {
+                setIsSidebarOpen(false); // Snap back
+            }
+        }
+        
+        dragStartRef.current = null;
+        setSidebarDragOffset(null);
+    };
+
   return (
-    <div className="w-screen h-screen font-sans flex overflow-hidden">
-      <Sidebar onAddNode={addNode} isOpen={isSidebarOpen} />
+    <div className="w-screen h-screen font-sans flex overflow-hidden" onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}>
+      <Sidebar sidebarRef={sidebarRef} onAddNode={addNode} isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} dragOffset={sidebarDragOffset} />
       <main className="relative flex-1 h-full">
-        <button 
-          onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-          className="md:hidden fixed top-4 left-4 z-40 p-2 bg-gray-100/80 dark:bg-gray-800/80 backdrop-blur-sm rounded-md text-gray-800 dark:text-white"
-        >
-          {isSidebarOpen ? <XIcon /> : <MenuIcon />}
-        </button>
-        {isSidebarOpen && <div onClick={() => setIsSidebarOpen(false)} className="md:hidden fixed inset-0 bg-black bg-opacity-50 z-20"></div>}
+        {!isSidebarOpen && (
+          <button 
+            onClick={() => setIsSidebarOpen(true)}
+            className="md:hidden fixed top-4 left-4 z-40 p-3 bg-slate-200/60 dark:bg-slate-900/60 backdrop-blur-md rounded-2xl text-slate-800 dark:text-white"
+            aria-label="Open sidebar"
+          >
+            <MenuIcon />
+          </button>
+        )}
+        {isSidebarOpen && <div onClick={() => setIsSidebarOpen(false)} className="md:hidden fixed inset-0 bg-black/40 z-20"></div>}
 
         <NodeEditor 
             nodes={nodes}
             edges={edges}
+            transform={transform}
+            setTransform={setTransform}
             onNodesChange={setNodes}
             onEdgesChange={setEdges}
             onUpdateNodeData={updateNodeData}
@@ -788,10 +889,11 @@ const App: React.FC = () => {
             onExpandSetting={handleExpandSetting}
             activeProgressTask={activeProgressTask}
             progress={progress}
+            editorRef={editorRef}
+            highlightedNodeId={highlightedNodeId}
+            setHighlightedNodeId={setHighlightedNodeId}
         />
         <Toolbar
-          language={language}
-          setLanguage={setLanguage}
           model={model}
           setModel={setModel}
           isGenerating={isAnyTaskRunning}
@@ -803,13 +905,13 @@ const App: React.FC = () => {
         />
         
         {isAnyTaskRunning && (activeProgressTask === 'outline' || activeProgressTask === 'story') && (
-            <div className="absolute bottom-24 right-4 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm p-4 rounded-lg shadow-lg z-20 w-72 border border-gray-200 dark:border-gray-700 animate-fade-in-up">
-                <h4 className="font-semibold text-gray-800 dark:text-gray-200">{activeProgressTask === 'outline' ? '正在生成大纲...' : '正在创作故事...'}</h4>
-                <p className="text-sm text-gray-500 dark:text-gray-400 mb-2 h-4">{progressMessage || '正在构思中，请稍候...'}</p>
-                <div className="w-full bg-gray-200 rounded-full h-2.5 dark:bg-gray-700">
-                    <div className="bg-cyan-600 h-2.5 rounded-full" style={{ width: `${progress}%`, transition: 'width 0.3s ease-in-out' }}></div>
+            <div className="absolute bottom-28 right-5 bg-slate-200/60 dark:bg-slate-900/60 backdrop-blur-lg p-5 rounded-3xl shadow-lg z-30 w-80 border border-slate-300/50 dark:border-slate-800/50 animate-scale-in">
+                <h4 className="font-bold text-lg text-slate-800 dark:text-slate-200">{activeProgressTask === 'outline' ? '正在生成大纲...' : '正在创作故事...'}</h4>
+                <p className="text-sm text-slate-500 dark:text-slate-400 mb-3 h-5">{progressMessage || '正在构思中，请稍候...'}</p>
+                <div className="w-full bg-slate-300/70 rounded-full h-2.5 dark:bg-slate-700/70">
+                    <div className="bg-blue-500 h-2.5 rounded-full" style={{ width: `${progress}%`, transition: 'width 0.3s ease-in-out' }}></div>
                 </div>
-                <p className="text-right text-sm font-semibold mt-1 text-gray-600 dark:text-gray-300">{progress}%</p>
+                <p className="text-right text-sm font-semibold mt-1 text-slate-600 dark:text-slate-300">{progress}%</p>
             </div>
         )}
 
@@ -846,6 +948,7 @@ const App: React.FC = () => {
         storyContentRef={storyContentRef}
         isAnyTaskRunning={isAnyTaskRunning}
         activeProgressTask={activeProgressTask}
+        progress={progress}
         revisionPrompt={revisionPrompt}
         onRevisionPromptChange={setRevisionPrompt}
         onRevise={handleRevise}
@@ -863,79 +966,105 @@ const App: React.FC = () => {
       />
       
       <Modal isOpen={isAssetModalOpen} onClose={() => setIsAssetModalOpen(false)} title="资产库">
-        <div className="w-full max-h-[70vh] bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-200 rounded-md overflow-y-auto">
+        <div className="w-full max-h-[70vh] text-slate-800 dark:text-slate-200 rounded-md">
             {assetLibrary.length === 0 ? (
-                <p className="text-center text-gray-500 dark:text-gray-400 py-8">资产库为空。请先生成大纲或故事。</p>
+                <p className="text-center text-slate-500 dark:text-slate-400 py-12 text-lg">资产库为空。请先生成大纲或故事。</p>
             ) : (
-                <ul className="divide-y divide-gray-200 dark:divide-gray-700">
-                    {assetLibrary.slice().reverse().map((asset) => (
-                        <li key={asset.timestamp.toISOString()} className="p-4 flex justify-between items-center hover:bg-gray-200 dark:hover:bg-gray-800 transition-colors">
-                            <div className="flex-grow">
-                                {renamingAssetId === asset.timestamp.toISOString() ? (
-                                    <div className="flex items-center space-x-2">
-                                        <input
-                                            type="text"
-                                            value={editingAssetName}
-                                            onChange={(e) => setEditingAssetName(e.target.value)}
-                                            onKeyDown={(e) => {
-                                                if (e.key === 'Enter') handleConfirmRenameAsset();
-                                                if (e.key === 'Escape') handleCancelRenameAsset();
-                                            }}
-                                            className="w-full bg-gray-200 dark:bg-gray-700 text-sm p-1 rounded focus:outline-none focus:ring-2 focus:ring-cyan-500 transition-colors"
-                                            autoFocus
-                                        />
-                                        <button onClick={handleConfirmRenameAsset} className="p-1 text-green-500 hover:text-green-400"><CheckIcon className="h-5 w-5"/></button>
-                                        <button onClick={handleCancelRenameAsset} className="p-1 text-red-500 hover:text-red-400"><XIcon className="h-5 w-5"/></button>
+                <ul className="space-y-3">
+                    {assetLibrary.slice().reverse().map((asset) => {
+                        const handlePreview = () => {
+                            if (asset.type === 'outline') {
+                                setOutlineHistory([asset.content as StructuredOutline]);
+                                setCurrentOutlineIndex(0);
+                                setModalContent('outline');
+                            } else {
+                                setStoryHistory([asset.content as string]);
+                                setCurrentStoryIndex(0);
+                                setModalContent('story');
+                            }
+                            setIsAssetModalOpen(false);
+                        };
+                        return (
+                        <li key={asset.timestamp.toISOString()} className="p-4 bg-slate-200/50 dark:bg-slate-800/50 rounded-2xl hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors"
+                            onClick={(e) => {
+                                if (window.innerWidth < 768 && !(e.target as HTMLElement).closest('button')) {
+                                    handlePreview();
+                                }
+                            }}
+                        >
+                            <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-3">
+                                <div className="flex-grow min-w-0 md:mr-4">
+                                    {renamingAssetId === asset.timestamp.toISOString() ? (
+                                        <div className="flex items-center space-x-2">
+                                            <input
+                                                type="text"
+                                                value={editingAssetName}
+                                                onChange={(e) => setEditingAssetName(e.target.value)}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter') handleConfirmRenameAsset();
+                                                    if (e.key === 'Escape') handleCancelRenameAsset();
+                                                }}
+                                                className="w-full bg-slate-300 dark:bg-slate-700 text-sm p-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+                                                autoFocus
+                                            />
+                                            <button onClick={handleConfirmRenameAsset} className="p-2 text-green-500 hover:text-green-400"><CheckIcon className="h-5 w-5"/></button>
+                                            <button onClick={handleCancelRenameAsset} className="p-2 text-red-500 hover:text-red-400"><XIcon className="h-5 w-5"/></button>
+                                        </div>
+                                    ) : (
+                                        <div className="flex justify-between items-center">
+                                            <div className="min-w-0 mr-2">
+                                                <p className="font-semibold text-lg truncate" title={asset.title}>{asset.title}</p>
+                                                <p className="text-sm text-slate-500 dark:text-slate-400">{asset.type === 'outline' ? '大纲' : '故事'}</p>
+                                            </div>
+                                            <button
+                                                onClick={() => handleStartRenameAsset(asset)}
+                                                className="h-11 w-11 flex md:hidden items-center justify-center bg-slate-300 dark:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-full hover:bg-slate-400/70 dark:hover:bg-slate-600/70 transition-colors flex-shrink-0"
+                                                title="重命名"
+                                            >
+                                                <PencilIcon className="h-5 w-5"/>
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                                
+                                {renamingAssetId !== asset.timestamp.toISOString() && (
+                                    <div className="flex items-center justify-start space-x-2 flex-shrink-0 w-full md:w-auto">
+                                        <button
+                                            onClick={handlePreview}
+                                            className="h-11 flex items-center justify-center bg-slate-300 dark:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-full hover:bg-slate-400/70 dark:hover:bg-slate-600/70 transition-colors px-4 md:w-11 md:px-0"
+                                            title="预览"
+                                        >
+                                            <EyeIcon className="h-6 w-6"/>
+                                            <span className="md:hidden ml-2 font-medium text-sm">预览</span>
+                                        </button>
+                                        <button
+                                            onClick={() => handleImportAssetAsNode(asset)}
+                                            className="h-11 flex items-center justify-center bg-slate-300 dark:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-full hover:bg-slate-400/70 dark:hover:bg-slate-600/70 transition-colors px-4 md:w-11 md:px-0"
+                                            title="导入为作品节点"
+                                        >
+                                            <DocumentAddIcon className="h-6 w-6"/>
+                                            <span className="md:hidden ml-2 font-medium text-sm">导入</span>
+                                        </button>
+                                        <button
+                                            onClick={() => handleStartRenameAsset(asset)}
+                                            className="h-11 w-11 hidden md:flex items-center justify-center bg-slate-300 dark:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-full hover:bg-slate-400/70 dark:hover:bg-slate-600/70 transition-colors"
+                                            title="重命名"
+                                        >
+                                            <PencilIcon className="h-5 w-5"/>
+                                        </button>
+                                         <button
+                                            onClick={() => handleDeleteAsset(asset.timestamp)}
+                                            className="h-11 flex items-center justify-center bg-slate-300 dark:bg-slate-700 text-red-500 rounded-full hover:bg-red-200 dark:hover:bg-red-900/40 hover:text-red-600 dark:hover:text-red-400 transition-colors px-4 md:w-11 md:px-0"
+                                            title="删除"
+                                        >
+                                            <TrashIcon className="h-5 w-5"/>
+                                            <span className="md:hidden ml-2 font-medium text-sm">删除</span>
+                                        </button>
                                     </div>
-                                ) : (
-                                    <>
-                                        <p className="font-semibold">{asset.title}</p>
-                                        <p className="text-sm text-gray-500 dark:text-gray-400">{asset.type === 'outline' ? '大纲' : '故事'}</p>
-                                    </>
                                 )}
                             </div>
-                            <div className="flex items-center space-x-2 flex-shrink-0 ml-4">
-                                <button
-                                    onClick={() => handleImportAssetAsNode(asset)}
-                                    className="p-2 bg-gray-300 dark:bg-gray-600 text-gray-800 dark:text-white rounded-lg hover:bg-gray-400 dark:hover:bg-gray-500 transition-colors"
-                                    title="导入为作品节点"
-                                >
-                                    <DocumentAddIcon className="h-5 w-5"/>
-                                </button>
-                                <button
-                                    onClick={() => handleStartRenameAsset(asset)}
-                                    className="p-2 bg-gray-300 dark:bg-gray-600 text-gray-800 dark:text-white rounded-lg hover:bg-gray-400 dark:hover:bg-gray-500 transition-colors"
-                                    title="重命名"
-                                >
-                                    <PencilIcon className="h-5 w-5"/>
-                                </button>
-                                 <button
-                                    onClick={() => handleDeleteAsset(asset.timestamp)}
-                                    className="p-2 bg-gray-300 dark:bg-gray-600 text-red-500 rounded-lg hover:bg-red-500 hover:text-white transition-colors"
-                                    title="删除"
-                                >
-                                    <TrashIcon className="h-5 w-5"/>
-                                </button>
-                                <button
-                                    onClick={() => {
-                                        if (asset.type === 'outline') {
-                                            setOutlineHistory([asset.content as StructuredOutline]);
-                                            setCurrentOutlineIndex(0);
-                                            setModalContent('outline');
-                                        } else {
-                                            setStoryHistory([asset.content as string]);
-                                            setCurrentStoryIndex(0);
-                                            setModalContent('story');
-                                        }
-                                        setIsAssetModalOpen(false);
-                                    }}
-                                    className="px-3 py-2 bg-cyan-600 text-white text-sm font-semibold rounded-lg hover:bg-cyan-500 transition-colors"
-                                >
-                                    预览
-                                </button>
-                            </div>
                         </li>
-                    ))}
+                    )})}
                 </ul>
             )}
         </div>

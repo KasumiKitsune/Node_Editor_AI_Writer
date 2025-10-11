@@ -1,9 +1,7 @@
 import React from 'react';
-import { TrashIcon, DownloadIcon, UploadIcon, SunIcon, MoonIcon, CustomSelect, CustomSelectOption } from './icons';
+import { TrashIcon, DownloadIcon, UploadIcon, SunIcon, MoonIcon, CustomSelect, CustomSelectOption, LightningBoltIcon, LightbulbIcon, BrainIcon } from './icons';
 
 interface ToolbarProps {
-  language: string;
-  setLanguage: (lang: string) => void;
   model: string;
   setModel: (model: string) => void;
   isGenerating: boolean;
@@ -14,87 +12,91 @@ interface ToolbarProps {
   setTheme: (theme: 'light' | 'dark') => void;
 }
 
-const Toolbar: React.FC<ToolbarProps> = ({ 
-  language,
-  setLanguage,
-  model,
-  setModel,
-  isGenerating,
-  onClearAllNodes,
-  onImportNodes,
-  onExportNodes,
-  theme,
-  setTheme
+const CoreButtons: React.FC<Pick<ToolbarProps, 'setTheme' | 'theme' | 'onImportNodes' | 'onExportNodes' | 'onClearAllNodes'>> = ({
+    setTheme,
+    theme,
+    onImportNodes,
+    onExportNodes,
+    onClearAllNodes,
 }) => {
+    const buttonClasses = "w-12 h-12 flex items-center justify-center bg-slate-200/80 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300 rounded-full hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors";
 
-  const languageOptions: CustomSelectOption[] = [
-    { value: '中文', label: '中文' },
-    { value: 'English', label: 'English' },
-    { value: '日本語', label: '日本語' },
-    { value: 'Français', label: 'Français' },
-    { value: 'Español', label: 'Español' },
-  ];
+    return (
+        <>
+            <button
+                onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
+                className={`${buttonClasses} hover:text-amber-500 dark:hover:text-amber-300`}
+                title="切换主题"
+            >
+                {theme === 'light' ? <MoonIcon className="h-6 w-6" /> : <SunIcon className="h-6 w-6" />}
+            </button>
+            <button
+                onClick={onImportNodes}
+                className={`${buttonClasses} hover:text-slate-900 dark:hover:text-white`}
+                title="导入节点"
+            >
+                <UploadIcon className="h-6 w-6" />
+            </button>
+            <button
+                onClick={onExportNodes}
+                className={`${buttonClasses} hover:text-slate-900 dark:hover:text-white`}
+                title="导出节点"
+            >
+                <DownloadIcon className="h-6 w-6" />
+            </button>
+            <button
+                onClick={onClearAllNodes}
+                className={`${buttonClasses} hover:bg-red-500/50 hover:text-red-700 dark:hover:bg-red-500/30 dark:hover:text-red-300`}
+                title="清除所有节点"
+            >
+                <TrashIcon className="h-6 w-6" />
+            </button>
+        </>
+    );
+};
 
-  // FIX: Updated model name 'gemini-flash-latest' to 'gemini-2.5-flash' to conform to API guidelines.
+
+const Toolbar: React.FC<ToolbarProps> = (props) => {
+  const { model, setModel, isGenerating } = props;
+
   const modelOptions: CustomSelectOption[] = [
-    { value: 'gemini-2.5-flash-no-thinking', label: '快速' },
-    { value: 'gemini-flash-latest', label: '均衡' },
-    { value: 'gemini-2.5-pro', label: '高质量' },
+    { value: 'gemini-2.5-flash-no-thinking', label: '最快', icon: <LightningBoltIcon className="h-5 w-5 mr-2 text-yellow-500" /> },
+    { value: 'gemini-flash-latest', label: '均衡', icon: <LightbulbIcon className="h-5 w-5 mr-2 text-blue-500" /> },
+    { value: 'gemini-2.5-pro', label: '高质量', icon: <BrainIcon className="h-5 w-5 mr-2 text-purple-500" /> },   
   ];
-  
+
   return (
-    <div className="absolute top-4 right-4 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm p-3 rounded-lg shadow-lg z-20 flex flex-wrap items-center gap-2 md:gap-4 border border-gray-200 dark:border-gray-700">
-        <button
-            onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
-            className="p-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 hover:text-yellow-500 dark:hover:text-yellow-300 transition-colors flex items-center"
-            title="切换主题"
-        >
-            {theme === 'light' ? <MoonIcon className="h-5 w-5" /> : <SunIcon className="h-5 w-5" />}
-        </button>
-        <button
-            onClick={onImportNodes}
-            className="p-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 hover:text-gray-900 dark:hover:text-white transition-colors flex items-center"
-            title="导入节点"
-        >
-            <UploadIcon className="h-5 w-5" />
-        </button>
-        <button
-            onClick={onExportNodes}
-            className="p-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 hover:text-gray-900 dark:hover:text-white transition-colors flex items-center"
-            title="导出节点"
-        >
-            <DownloadIcon className="h-5 w-5" />
-        </button>
-         <button
-            onClick={onClearAllNodes}
-            className="p-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-red-500 hover:text-white transition-colors flex items-center"
-            title="清除所有节点"
-        >
-            <TrashIcon className="h-5 w-5" />
-        </button>
+    <>
+        {/* Desktop View: One combined pill */}
+        <div className="hidden md:flex absolute top-5 right-5 bg-slate-200/60 dark:bg-slate-900/60 backdrop-blur-lg p-2 rounded-full shadow-lg z-20 items-center gap-2 border border-slate-300/50 dark:border-slate-800/50">
+            <CoreButtons {...props} />
+            <div className="flex items-center w-48 pl-1">
+                <CustomSelect
+                    id="model-select-desktop"
+                    options={modelOptions}
+                    value={model}
+                    onChange={setModel}
+                    disabled={isGenerating}
+                />
+            </div>
+        </div>
 
-      <div className="flex items-center space-x-2 w-32">
-        <label htmlFor="language-select" className="text-sm font-medium text-gray-600 dark:text-gray-300 sr-only">写作语言:</label>
-        <CustomSelect
-          id="language-select"
-          options={languageOptions}
-          value={language}
-          onChange={setLanguage}
-          disabled={isGenerating}
-        />
-      </div>
-
-      <div className="flex items-center space-x-2 w-40">
-        <label htmlFor="model-select" className="text-sm font-medium text-gray-600 dark:text-gray-300 sr-only">AI 模型:</label>
-        <CustomSelect
-          id="model-select"
-          options={modelOptions}
-          value={model}
-          onChange={setModel}
-          disabled={isGenerating}
-        />
-      </div>
-    </div>
+        {/* Mobile View: Stacked pills */}
+        <div className="md:hidden absolute top-5 right-5 z-20 flex flex-col items-end gap-2 pointer-events-none">
+            <div className="bg-slate-200/60 dark:bg-slate-900/60 backdrop-blur-lg p-2 rounded-full shadow-lg flex items-center gap-2 border border-slate-300/50 dark:border-slate-800/50 pointer-events-auto">
+                <CoreButtons {...props} />
+            </div>
+            <div className="bg-slate-200/60 dark:bg-slate-900/60 backdrop-blur-lg p-2 rounded-full shadow-lg w-52 border border-slate-300/50 dark:border-slate-800/50 pointer-events-auto">
+                <CustomSelect
+                    id="model-select-mobile"
+                    options={modelOptions}
+                    value={model}
+                    onChange={setModel}
+                    disabled={isGenerating}
+                />
+            </div>
+        </div>
+    </>
   );
 };
 

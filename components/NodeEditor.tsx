@@ -6,6 +6,8 @@ import { XIcon } from './icons';
 interface NodeEditorProps {
   nodes: Node[];
   edges: Edge[];
+  transform: { x: number, y: number, scale: number };
+  setTransform: (transform: { x: number, y: number, scale: number }) => void;
   onNodesChange: (nodes: Node[]) => void;
   onEdgesChange: (edges: Edge[]) => void;
   onUpdateNodeData: (nodeId: string, data: any) => void;
@@ -15,6 +17,9 @@ interface NodeEditorProps {
   onExpandSetting: (nodeId: string) => void;
   activeProgressTask: string | null;
   progress: number;
+  editorRef: React.RefObject<HTMLDivElement>;
+  highlightedNodeId: string | null;
+  setHighlightedNodeId: (id: string | null) => void;
 }
 
 const getDistance = (touches: React.TouchList) => {
@@ -27,15 +32,13 @@ const getMidpoint = (touches: React.TouchList) => {
     return { x: (t1.clientX + t2.clientX) / 2, y: (t1.clientY + t2.clientY) / 2 };
 }
 
-const NodeEditor: React.FC<NodeEditorProps> = ({ nodes, edges, onNodesChange, onEdgesChange, onUpdateNodeData, onDeleteNode, onToggleNodeCollapse, onAnalyzeWork, onExpandSetting, activeProgressTask, progress }) => {
+const NodeEditor: React.FC<NodeEditorProps> = ({ nodes, edges, transform, setTransform, onNodesChange, onEdgesChange, onUpdateNodeData, onDeleteNode, onToggleNodeCollapse, onAnalyzeWork, onExpandSetting, activeProgressTask, progress, editorRef, highlightedNodeId, setHighlightedNodeId }) => {
   const [draggingNode, setDraggingNode] = useState<{ id: string; offset: { x: number; y: number } } | null>(null);
   const [connecting, setConnecting] = useState<{ sourceId: string; sourceHandleId?: string; targetPos: { x: number; y: number } } | null>(null);
-  const [transform, setTransform] = useState({ x: 0, y: 0, scale: 1 });
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
   const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null);
 
-  const editorRef = useRef<HTMLDivElement>(null);
   const isSpacePressedRef = useRef(false);
   const pinchStateRef = useRef({
       isPinching: false,
@@ -79,6 +82,11 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ nodes, edges, onNodesChange, on
 
   const handleInteractionStart = useCallback((e: MouseEvent<HTMLDivElement> | TouchEvent<HTMLDivElement>) => {
     const isTouchEvent = 'touches' in e;
+    const target = (isTouchEvent ? e.targetTouches[0]?.target : e.target) as HTMLElement;
+
+    if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.closest('button')) {
+        return;
+    }
 
     if (isTouchEvent && e.touches.length === 2) {
         e.preventDefault();
@@ -93,18 +101,22 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ nodes, edges, onNodesChange, on
     
     const evt = isTouchEvent ? e.touches[0] : e;
     
-    const target = evt.target as HTMLElement;
     const nodeId = target.closest('[data-node-id]')?.getAttribute('data-node-id');
     const handle = target.closest('[data-handle]');
     const dragHandle = target.closest('.node-drag-handle');
+    const isBackground = target === editorRef.current;
+    
+    const isSidebarDragArea = isTouchEvent && evt.clientX < 80;
+    const shouldStartPan = (isSpacePressedRef.current && !nodeId) || (isTouchEvent && isBackground && !nodeId && !isSidebarDragArea);
 
-    if (isSpacePressedRef.current && !nodeId) {
+
+    if (shouldStartPan) {
         setIsPanning(true);
         setPanStart({
             x: evt.clientX - transform.x,
             y: evt.clientY - transform.y,
         });
-        document.body.style.cursor = 'grabbing';
+        if (!isTouchEvent) document.body.style.cursor = 'grabbing';
         return;
     }
 
@@ -121,6 +133,9 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ nodes, edges, onNodesChange, on
         setConnecting({ sourceId: nodeId, sourceHandleId, targetPos: transformedPos });
       }
     } else if (nodeId && dragHandle) {
+      if (nodeId === highlightedNodeId) {
+          setHighlightedNodeId(null);
+      }
       const node = nodes.find(n => n.id === nodeId);
       if (!node) return;
       
@@ -131,7 +146,7 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ nodes, edges, onNodesChange, on
       });
       // Set cursor on the drag handle itself via CSS, so no need to set body cursor
     }
-  }, [nodes, transform]);
+  }, [nodes, transform, highlightedNodeId, setHighlightedNodeId]);
 
   const handleInteractionMove = useCallback((e: MouseEvent<HTMLDivElement> | TouchEvent<HTMLDivElement>) => {
     const isTouchEvent = 'touches' in e;
@@ -168,7 +183,8 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ nodes, edges, onNodesChange, on
     if (isPanning) {
         const newX = evt.clientX - panStart.x;
         const newY = evt.clientY - panStart.y;
-        setTransform(t => ({...t, x: newX, y: newY}));
+        // FIX: Corrected the call to `setTransform` to pass an object instead of a function, resolving a TypeScript type error. The updated call now uses the existing `transform` prop to preserve the scale while updating x and y coordinates.
+        setTransform({ ...transform, x: newX, y: newY });
         return;
     }
     
@@ -186,7 +202,7 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ nodes, edges, onNodesChange, on
     if (connecting) {
         setConnecting({ ...connecting, targetPos: transformedPos });
     }
-  }, [draggingNode, connecting, nodes, onNodesChange, isPanning, panStart]);
+  }, [draggingNode, connecting, nodes, onNodesChange, isPanning, panStart, transform, setTransform]);
 
   const handleInteractionEnd = useCallback((e: MouseEvent<HTMLDivElement> | TouchEvent<HTMLDivElement>) => {
     document.body.style.userSelect = 'auto';
@@ -333,7 +349,7 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ nodes, edges, onNodesChange, on
     const newY = mousePoint.y - worldPoint.y * newScale;
 
     setTransform({ x: newX, y: newY, scale: newScale });
-  }, [transform.scale]);
+  }, [transform, setTransform]);
 
   const handleContextMenu = (e: MouseEvent<HTMLDivElement>) => {
     if (connecting) {
@@ -356,10 +372,11 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ nodes, edges, onNodesChange, on
   return (
     <div
       ref={editorRef}
-      className="absolute inset-0 bg-gray-100 dark:bg-gray-900 overflow-hidden"
+      className="absolute inset-0 bg-slate-100 dark:bg-slate-950 overflow-hidden"
       style={{
-        backgroundImage: 'radial-gradient(hsla(220, 13%, 70%, 0.5) 1px, transparent 0)',
-        backgroundSize: '20px 20px',
+        backgroundImage: 'radial-gradient(hsla(215, 20%, 80%, 0.5) 1px, transparent 0)',
+        backgroundSize: '30px 30px',
+        backgroundPosition: `${transform.x}px ${transform.y}px`,
         touchAction: 'none',
       }}
       onMouseDown={handleInteractionStart}
@@ -371,8 +388,8 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ nodes, edges, onNodesChange, on
       onWheel={handleWheel}
       onContextMenu={handleContextMenu}
     >
-      <div className="dark-grid"></div>
-      <div className="absolute top-0 left-0 w-full h-full" style={transformStyle}>
+      <div className="dark-grid pointer-events-none"></div>
+      <div className="absolute top-0 left-0 w-full h-full pointer-events-none" style={transformStyle}>
         {nodes.map(node => {
             let connectableTargetType: 'style' | 'flow' | null = null;
             if (sourceNodeWhenConnecting && sourceNodeWhenConnecting.id !== node.id) {
@@ -401,6 +418,8 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ nodes, edges, onNodesChange, on
                 connectableTargetType={connectableTargetType}
                 activeProgressTask={activeProgressTask}
                 progress={progress}
+                isDragging={draggingNode?.id === node.id}
+                highlightedNodeId={highlightedNodeId}
               />
             )
         })}
@@ -416,14 +435,14 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ nodes, edges, onNodesChange, on
                       <g key={edge.id} className="pointer-events-auto" onMouseEnter={() => setHoveredEdgeId(edge.id)} onMouseLeave={() => setHoveredEdgeId(null)}>
                           <path
                               d={path}
-                              className="stroke-gray-400 dark:stroke-gray-600"
-                              strokeWidth="2"
+                              className={`transition-colors duration-150 ${hoveredEdgeId === edge.id ? 'stroke-red-500 dark:stroke-red-400' : 'stroke-slate-400 dark:stroke-slate-600'}`}
+                              strokeWidth="3"
                               fill="none"
                           />
-                          <path d={path} stroke="transparent" strokeWidth="15" fill="none" />
-                          {hoveredEdgeId === edge.id && (
+                          <path d={path} stroke="transparent" strokeWidth="20" fill="none" />
+                           {hoveredEdgeId === edge.id && (
                               <g transform={`translate(${midPoint.x}, ${midPoint.y})`} style={{ cursor: 'pointer' }} onClick={() => handleDeleteEdge(edge.id)}>
-                                  <circle r="8" className="fill-red-500 hover:fill-red-600" />
+                                  <circle r="10" className="fill-red-500 dark:fill-red-600 stroke-slate-100 dark:stroke-slate-800" strokeWidth="2"/>
                               </g>
                           )}
                       </g>
@@ -432,10 +451,10 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ nodes, edges, onNodesChange, on
               {connecting && (
                   <path
                       d={getConnectingPath()}
-                      stroke="#38bdf8"
-                      strokeWidth="2"
+                      stroke="#3b82f6"
+                      strokeWidth="3"
                       fill="none"
-                      strokeDasharray="5,5"
+                      strokeDasharray="8,8"
                       className="pointer-events-none"
                   />
               )}
@@ -443,8 +462,8 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ nodes, edges, onNodesChange, on
       </svg>
       <style>{`
         .dark .dark-grid {
-          background-image: radial-gradient(hsla(220, 13%, 40%, 0.5) 1px, transparent 0);
-          background-size: 20px 20px;
+          background-image: radial-gradient(hsla(215, 20%, 50%, 0.5) 1px, transparent 0);
+          background-size: 30px 30px;
           position: absolute;
           inset: 0;
         }
