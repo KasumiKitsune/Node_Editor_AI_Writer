@@ -61,7 +61,7 @@ const Toolbar: React.FC<ToolbarProps> = (props) => {
 
   const modelOptions: CustomSelectOption[] = [
     { value: 'gemini-2.5-flash-no-thinking', label: '最快', icon: <LightningBoltIcon className="h-5 w-5 mr-2 text-yellow-500" /> },
-    { value: 'gemini-flash-latest', label: '均衡', icon: <LightbulbIcon className="h-5 w-5 mr-2 text-blue-500" /> },
+    { value: 'gemini-2.5-flash', label: '均衡', icon: <LightbulbIcon className="h-5 w-5 mr-2 text-blue-500" /> },
     { value: 'gemini-2.5-pro', label: '高质量', icon: <BrainIcon className="h-5 w-5 mr-2 text-purple-500" /> },   
   ];
 

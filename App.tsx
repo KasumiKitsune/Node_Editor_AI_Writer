@@ -32,13 +32,13 @@ interface Heading {
 const App: React.FC = () => {
   const [nodes, setNodes] = useState<Node[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
-  const [model, setModel] = useState<string>('gemini-flash-latest');
+  const [model, setModel] = useState<string>('gemini-2.5-flash');
   const [theme, setTheme] = useState<'light' | 'dark'>(() => (localStorage.getItem('theme') as 'light' | 'dark') || 'light');
   const [targetWordCount, setTargetWordCount] = useState<string>('');
   const [transform, setTransform] = useState({ x: 100, y: 100, scale: 1 });
   const [highlightedNodeId, setHighlightedNodeId] = useState<string | null>(null);
 
-  const { progress, progressMessage, activeProgressTask, isAnyTaskRunning, setProgressMessage, startProgress, stopProgress } = useProgress();
+  const { progress, progressMessage, activeProgressTask, isAnyTaskRunning, setProgressMessage, startProgress, stopProgress, startSteppedProgress, completeStepAndAdvance, cancelProgress } = useProgress();
 
   const [modalContent, setModalContent] = useState<'outline' | 'story' | null>(null);
   
@@ -96,6 +96,44 @@ const App: React.FC = () => {
   const handleConfirm = () => {
     confirmModal.onConfirm();
     closeConfirm();
+  };
+
+  const modelDisplayNames: { [key: string]: string } = {
+      'gemini-2.5-flash-no-thinking': '最快',
+      'gemini-2.5-flash': '均衡',
+      'gemini-2.5-pro': '高质量',
+  };
+
+  const getNextModelForRetry = (current: string): string => {
+      if (current === 'gemini-2.5-pro') {
+          return 'gemini-2.5-flash';
+      }
+      return 'gemini-2.5-pro';
+  };
+
+  const withRetry = async <T,>(
+      apiCall: (currentModel: string) => Promise<T>
+  ): Promise<T> => {
+      let currentModelAttempt = model;
+      try {
+          const result = await apiCall(currentModelAttempt);
+          return result;
+      } catch (error) {
+          console.warn(`API call with model ${currentModelAttempt} failed. Retrying...`, error);
+          
+          const nextModel = getNextModelForRetry(currentModelAttempt);
+          const nextModelName = modelDisplayNames[nextModel] || nextModel;
+          setProgressMessage(`操作失败，正在使用“${nextModelName}”模型重试...`);
+          setModel(nextModel);
+          
+          try {
+              const result = await apiCall(nextModel);
+              return result;
+          } catch (retryError) {
+              console.error(`Retry with model ${nextModel} also failed.`, retryError);
+              throw retryError;
+          }
+      }
   };
 
   useEffect(() => {
@@ -481,7 +519,11 @@ const App: React.FC = () => {
             stopProgress();
             return;
         }
-        const result = await generateOutline(nodes, edges, '中文', model, wordCount);
+
+        const result = await withRetry(
+            (currentModel) => generateOutline(nodes, edges, '中文', currentModel, wordCount)
+        );
+
         stopProgress(() => {
             setOutlineHistory([result]);
             setCurrentOutlineIndex(0);
@@ -508,7 +550,9 @@ const App: React.FC = () => {
         if (isShortForm) {
             startProgress('story', '正在创作短篇故事...');
             try {
-                const finalStory = await generateShortStory(nodes, edges, currentOutline, '中文', model);
+                const finalStory = await withRetry(
+                    (currentModel) => generateShortStory(nodes, edges, currentOutline, '中文', currentModel)
+                );
                 stopProgress(() => {
                     setStoryHistory([finalStory]);
                     setCurrentStoryIndex(0);
@@ -522,11 +566,13 @@ const App: React.FC = () => {
             }
         } else {
             // --- Long Story (Chapter-based) Generation ---
-            startProgress('story', '正在准备创作...');
+            const totalChapters = currentOutline.segments.reduce((acc, s) => acc + (s.chapters?.length || 0), 0);
+            startSteppedProgress('story', `正在准备创作 (共 ${totalChapters} 章)...`, totalChapters);
+            
             let accumulatedStory = "";
             const storyParts: string[] = [];
-            const totalChapters = currentOutline.segments.reduce((acc, s) => acc + (s.chapters?.length || 0), 0);
             let chaptersDone = 0;
+            let currentModelForLoop = model;
 
             try {
                 for (let i = 0; i < currentOutline.segments.length; i++) {
@@ -537,12 +583,32 @@ const App: React.FC = () => {
                         chaptersDone++;
                         setProgressMessage(`正在创作第 ${chaptersDone} / ${totalChapters} 章...`);
                         
-                        const newChapterText = await generateStoryChapter(
-                            nodes, edges, currentOutline, accumulatedStory, i, j, '中文', model
-                        );
-                        
-                        storyParts.push(newChapterText);
-                        accumulatedStory += (accumulatedStory ? "\n\n" : "") + newChapterText;
+                        let success = false;
+                        let attempts = 0;
+                        while (!success && attempts < 2) {
+                            try {
+                                const newChapterText = await generateStoryChapter(
+                                    nodes, edges, currentOutline, accumulatedStory, i, j, '中文', currentModelForLoop
+                                );
+                                
+                                storyParts.push(newChapterText);
+                                accumulatedStory += (accumulatedStory ? "\n\n" : "") + newChapterText;
+                                success = true;
+
+                                // Complete the progress for this step
+                                completeStepAndAdvance();
+
+                            } catch (err) {
+                                attempts++;
+                                if (attempts >= 2) throw err;
+
+                                const nextModel = getNextModelForRetry(currentModelForLoop);
+                                const nextModelName = modelDisplayNames[nextModel] || nextModel;
+                                setProgressMessage(`创作第 ${chaptersDone} 章失败，正在使用“${nextModelName}”模型重试...`);
+                                setModel(nextModel);
+                                currentModelForLoop = nextModel;
+                            }
+                        }
                     }
                 }
                 
@@ -566,17 +632,19 @@ const App: React.FC = () => {
     startProgress('story', '正在构思大纲...');
     try {
         const wordCount = parseInt(targetWordCount, 10);
-        // Step 1: Generate a temporary short-story outline
-        const tempOutline = await generateOutline(nodes, edges, '中文', model, wordCount);
         
-        // This won't be displayed, but stored for context and asset library
+        const tempOutline = await withRetry(
+            (currentModel) => generateOutline(nodes, edges, '中文', currentModel, wordCount)
+        );
+        
         setOutlineHistory([tempOutline]);
         setCurrentOutlineIndex(0);
 
         setProgressMessage('正在创作故事...');
         
-        // Step 2: Generate the story from the temporary outline
-        const finalStory = await generateShortStory(nodes, edges, tempOutline, '中文', model);
+        const finalStory = await withRetry(
+            (currentModel) => generateShortStory(nodes, edges, tempOutline, '中文', currentModel)
+        );
 
         stopProgress(() => {
             setStoryHistory([finalStory]);
@@ -614,7 +682,10 @@ const App: React.FC = () => {
         if (!currentOutline || !revisionPrompt.trim()) return;
         startProgress('revise_outline', '正在修改大纲...');
         try {
-            const revisedOutline = await reviseOutline(currentOutline, revisionPrompt, '中文', model);
+            const revisedOutline = await withRetry(
+                (currentModel) => reviseOutline(currentOutline, revisionPrompt, '中文', currentModel)
+            );
+
             stopProgress(() => {
                 const newHistory = [...outlineHistory.slice(0, currentOutlineIndex + 1), revisedOutline];
                 setOutlineHistory(newHistory);
@@ -648,7 +719,9 @@ const App: React.FC = () => {
         if (!currentStory || !revisionPrompt.trim()) return;
         startProgress('revise_story', '正在修改故事...');
         try {
-            const revisedStory = await reviseStory(currentStory, revisionPrompt, '中文', model);
+            const revisedStory = await withRetry(
+                (currentModel) => reviseStory(currentStory, revisionPrompt, '中文', currentModel)
+            );
             stopProgress(() => {
                 const newHistory = [...storyHistory.slice(0, currentStoryIndex + 1), revisedStory];
                 setStoryHistory(newHistory);
@@ -860,6 +933,10 @@ const App: React.FC = () => {
         setSidebarDragOffset(null);
     };
 
+    const handleCancel = () => {
+      cancelProgress();
+    };
+
   return (
     <div className="w-screen h-screen font-sans flex overflow-hidden" onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}>
       <Sidebar sidebarRef={sidebarRef} onAddNode={addNode} isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} dragOffset={sidebarDragOffset} />
@@ -904,16 +981,29 @@ const App: React.FC = () => {
           setTheme={setTheme}
         />
         
-        {isAnyTaskRunning && (activeProgressTask === 'outline' || activeProgressTask === 'story') && (
-            <div className="absolute bottom-28 right-5 bg-slate-200/60 dark:bg-slate-900/60 backdrop-blur-lg p-5 rounded-3xl shadow-lg z-30 w-80 border border-slate-300/50 dark:border-slate-800/50 animate-scale-in">
-                <h4 className="font-bold text-lg text-slate-800 dark:text-slate-200">{activeProgressTask === 'outline' ? '正在生成大纲...' : '正在创作故事...'}</h4>
-                <p className="text-sm text-slate-500 dark:text-slate-400 mb-3 h-5">{progressMessage || '正在构思中，请稍候...'}</p>
-                <div className="w-full bg-slate-300/70 rounded-full h-2.5 dark:bg-slate-700/70">
-                    <div className="bg-blue-500 h-2.5 rounded-full" style={{ width: `${progress}%`, transition: 'width 0.3s ease-in-out' }}></div>
+        {isAnyTaskRunning && (
+            <div className="absolute bottom-28 right-5 z-40 flex flex-row items-center md:flex-col md:items-end gap-3 md:gap-4 pointer-events-none">
+                <div className="md:hidden pointer-events-auto">
+                     <button
+                        onClick={handleCancel}
+                        className="px-6 h-12 bg-red-600 text-white font-bold rounded-full hover:bg-red-500 transition-colors shadow-lg shadow-red-500/30 hover:shadow-red-500/40 flex items-center gap-2 animate-scale-in"
+                    >
+                        <XIcon className="h-5 w-5" />
+                        <span>取消</span>
+                    </button>
                 </div>
-                <p className="text-right text-sm font-semibold mt-1 text-slate-600 dark:text-slate-300">{progress}%</p>
+                {(activeProgressTask === 'outline' || activeProgressTask === 'story' || activeProgressTask?.startsWith('revise')) && (
+                    <div className="bg-slate-200/60 dark:bg-slate-900/60 backdrop-blur-lg p-5 rounded-3xl shadow-lg w-64 md:w-80 border border-slate-300/50 dark:border-slate-800/50 animate-scale-in pointer-events-auto">
+                        <h4 className="font-bold text-lg text-slate-800 dark:text-slate-200 truncate">{progressMessage || '正在处理...'}</h4>
+                        <div className="w-full bg-slate-300/70 rounded-full h-2.5 dark:bg-slate-700/70 mt-3">
+                            <div className="bg-blue-500 h-2.5 rounded-full" style={{ width: `${progress}%`, transition: 'width 0.3s ease-in-out' }}></div>
+                        </div>
+                        <p className="text-right text-sm font-semibold mt-1 text-slate-600 dark:text-slate-300">{progress}%</p>
+                    </div>
+                )}
             </div>
         )}
+
 
         <GenerationControls
             isAnyTaskRunning={isAnyTaskRunning}
@@ -925,6 +1015,7 @@ const App: React.FC = () => {
             onGenerateStory={handleGenerateStory}
             onOpenHelp={() => setIsHelpModalOpen(true)}
             onOpenAssets={() => setIsAssetModalOpen(true)}
+            onCancel={handleCancel}
         />
 
         <input 

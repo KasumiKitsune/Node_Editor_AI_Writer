@@ -1,4 +1,5 @@
 
+
 import React, { useState } from 'react';
 import { StructuredOutline } from '../types';
 import { ChevronDownIcon, ChevronUpIcon, LibraryIcon, QuestionMarkCircleIcon, PencilIcon, XIcon, PlusIcon, DocumentAddIcon } from './icons';
@@ -13,6 +14,7 @@ interface GenerationControlsProps {
     onGenerateStory: () => void;
     onOpenHelp: () => void;
     onOpenAssets: () => void;
+    onCancel: () => void;
 }
 
 const CoreControls: React.FC<Pick<GenerationControlsProps, 'onOpenHelp' | 'onOpenAssets' | 'targetWordCount' | 'onWordCountChange' | 'onAdjustWordCount' | 'isAnyTaskRunning'>> = ({
@@ -98,7 +100,7 @@ const GenerateButtons: React.FC<Pick<GenerationControlsProps, 'isAnyTaskRunning'
 
 const GenerationControls: React.FC<GenerationControlsProps> = (props) => {
     const [isMobileActionsExpanded, setMobileActionsExpanded] = useState(false);
-    const { outline, targetWordCount, onGenerateOutline, onGenerateStory, isAnyTaskRunning } = props;
+    const { outline, targetWordCount, onGenerateOutline, onGenerateStory, isAnyTaskRunning, onCancel } = props;
 
     const targetWordCountInt = parseInt(targetWordCount, 10);
     const canGenerateStoryDirectly = !isNaN(targetWordCountInt) && targetWordCountInt > 0 && targetWordCountInt <= 2000;
@@ -112,51 +114,67 @@ const GenerationControls: React.FC<GenerationControlsProps> = (props) => {
                 <div className="flex items-center gap-3">
                     <GenerateButtons {...props} />
                 </div>
+                 {props.isAnyTaskRunning && (
+                    <>
+                        <div className="h-8 w-px bg-slate-300 dark:bg-slate-700 mx-2"></div>
+                        <button
+                            onClick={onCancel}
+                            className="px-6 h-12 bg-red-600 text-white font-bold rounded-full hover:bg-red-500 transition-colors shadow-lg shadow-red-500/30 hover:shadow-red-500/40 flex items-center gap-2 animate-scale-in"
+                        >
+                            <XIcon className="h-5 w-5" />
+                            <span>取消</span>
+                        </button>
+                    </>
+                )}
             </div>
 
             {/* Mobile View: Stacked elements */}
-            {isMobileActionsExpanded && <div className="md:hidden fixed inset-0 z-20 bg-black/30" onClick={() => setMobileActionsExpanded(false)} />}
-            <div className="md:hidden absolute bottom-5 right-5 z-20 flex flex-col items-end gap-3 pointer-events-none">
-                 <div className="relative flex flex-col items-end pointer-events-auto">
-                    {isMobileActionsExpanded && (
-                        <div className="flex flex-col items-end gap-4 mb-4 animate-scale-in" style={{ animationDuration: '150ms' }}>
-                            <div className="flex items-center gap-3">
-                                <span className="bg-slate-900/80 dark:bg-slate-200/80 text-white dark:text-black text-sm px-3 py-1.5 rounded-full shadow-md">生成故事</span>
-                                <button
-                                    onClick={() => { onGenerateStory(); setMobileActionsExpanded(false); }}
-                                    disabled={isAnyTaskRunning || (!outline && !canGenerateStoryDirectly)}
-                                    className="w-14 h-14 bg-blue-600 text-white font-bold rounded-2xl hover:bg-blue-500 transition-colors disabled:bg-slate-500 disabled:cursor-not-allowed shadow-lg flex items-center justify-center"
-                                    title={!outline && canGenerateStoryDirectly ? "直接生成短篇故事" : "根据大纲生成故事"}
-                                >
-                                    <PencilIcon className="h-6 w-6"/>
-                                </button>
-                            </div>
+            <div className="md:hidden absolute bottom-5 right-5 z-20 flex flex-col items-end gap-3">
+                 {isMobileActionsExpanded && <div className="fixed inset-0 z-20 bg-black/30" onClick={() => setMobileActionsExpanded(false)} />}
+                 
+                 <div className="flex flex-row items-end gap-3">
+                     <div className="relative z-30 flex flex-col items-end pointer-events-auto">
+                        {isMobileActionsExpanded && (
+                            <div className="flex flex-col items-end gap-4 mb-4 animate-scale-in" style={{ animationDuration: '150ms' }}>
+                                <div className="flex items-center gap-3">
+                                    <span className="bg-slate-900/80 dark:bg-slate-200/80 text-white dark:text-black text-sm px-3 py-1.5 rounded-full shadow-md">生成故事</span>
+                                    <button
+                                        onClick={() => { onGenerateStory(); setMobileActionsExpanded(false); }}
+                                        disabled={isAnyTaskRunning || (!outline && !canGenerateStoryDirectly)}
+                                        className="w-14 h-14 bg-blue-600 text-white font-bold rounded-2xl hover:bg-blue-500 transition-colors disabled:bg-slate-500 disabled:cursor-not-allowed shadow-lg flex items-center justify-center"
+                                        title={!outline && canGenerateStoryDirectly ? "直接生成短篇故事" : "根据大纲生成故事"}
+                                    >
+                                        <PencilIcon className="h-6 w-6"/>
+                                    </button>
+                                </div>
 
-                            <div className="flex items-center gap-3">
-                                <span className="bg-slate-900/80 dark:bg-slate-200/80 text-white dark:text-black text-sm px-3 py-1.5 rounded-full shadow-md">生成大纲</span>
-                                <button
-                                    onClick={() => { onGenerateOutline(); setMobileActionsExpanded(false); }}
-                                    disabled={isAnyTaskRunning}
-                                    className="w-14 h-14 bg-blue-200 text-blue-800 dark:bg-blue-900/80 dark:text-blue-200 font-bold rounded-2xl hover:bg-blue-300 dark:hover:bg-blue-800 transition-colors disabled:bg-slate-300 disabled:cursor-not-allowed flex items-center justify-center"
-                                >
-                                    <DocumentAddIcon className="h-6 w-6"/>
-                                </button>
+                                <div className="flex items-center gap-3">
+                                    <span className="bg-slate-900/80 dark:bg-slate-200/80 text-white dark:text-black text-sm px-3 py-1.5 rounded-full shadow-md">生成大纲</span>
+                                    <button
+                                        onClick={() => { onGenerateOutline(); setMobileActionsExpanded(false); }}
+                                        disabled={isAnyTaskRunning}
+                                        className="w-14 h-14 bg-blue-200 text-blue-800 dark:bg-blue-900/80 dark:text-blue-200 font-bold rounded-2xl hover:bg-blue-300 dark:hover:bg-blue-800 transition-colors disabled:bg-slate-300 disabled:cursor-not-allowed flex items-center justify-center"
+                                    >
+                                        <DocumentAddIcon className="h-6 w-6"/>
+                                    </button>
+                                </div>
                             </div>
-                        </div>
-                    )}
-                    <button
-                        onClick={() => setMobileActionsExpanded(prev => !prev)}
-                        className="w-16 h-16 bg-blue-600 text-white rounded-full flex items-center justify-center shadow-lg hover:bg-blue-500 transition-all duration-300 transform hover:scale-105"
-                        aria-expanded={isMobileActionsExpanded}
-                        aria-label="Toggle generation options"
-                    >
-                         {isMobileActionsExpanded ? (
-                            <XIcon className="h-8 w-8 transition-transform duration-300" />
-                        ) : (
-                            <PencilIcon className="h-7 w-7 transition-transform duration-300" />
                         )}
-                    </button>
-                 </div>
+                        <button
+                            onClick={() => setMobileActionsExpanded(prev => !prev)}
+                            className="w-16 h-16 bg-blue-600 text-white rounded-full flex items-center justify-center shadow-lg hover:bg-blue-500 transition-all duration-300 transform hover:scale-105 pointer-events-auto"
+                            aria-expanded={isMobileActionsExpanded}
+                            aria-label="Toggle generation options"
+                        >
+                             {isMobileActionsExpanded ? (
+                                <XIcon className="h-8 w-8 transition-transform duration-300" />
+                            ) : (
+                                <PencilIcon className="h-7 w-7 transition-transform duration-300" />
+                            )}
+                        </button>
+                     </div>
+                </div>
+
                  <div className="bg-slate-200/60 dark:bg-slate-900/60 backdrop-blur-lg p-3 rounded-full shadow-lg flex items-center gap-3 border border-slate-300/50 dark:border-slate-800/50 pointer-events-auto">
                     <CoreControls {...props} />
                  </div>

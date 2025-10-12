@@ -84,6 +84,13 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ nodes, edges, transform, setTra
     const isTouchEvent = 'touches' in e;
     const target = (isTouchEvent ? e.targetTouches[0]?.target : e.target) as HTMLElement;
 
+    // Prioritize node interactions (drag, connect) over sidebar gestures on mobile.
+    // If the touch starts on any part of a node, stop the event from bubbling
+    // up to the App's root div, which handles the sidebar swipe gesture.
+    if (isTouchEvent && target.closest('[data-node-id]')) {
+        e.stopPropagation();
+    }
+
     if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.closest('button')) {
         return;
     }
