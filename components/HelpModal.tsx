@@ -28,8 +28,26 @@ const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose, onLoadExample })
 
   if (!isOpen) return null;
 
+  const mobileFooter = (
+    <div className="flex items-center gap-3">
+        <button onClick={onClose} className="flex-1 px-6 py-3 bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-white font-semibold rounded-full hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors">
+            返回
+        </button>
+        {activeTab !== 'manual' && (
+            <button
+                onClick={() => onLoadExample(activeTab as ExampleName)}
+                className="flex-1 inline-flex items-center justify-center px-6 py-3 bg-emerald-600 text-white font-semibold rounded-full hover:bg-emerald-500 transition-colors shadow-lg"
+            >
+                <UploadIcon className="h-5 w-5 mr-2" />
+                加载示例
+            </button>
+        )}
+    </div>
+  );
+
+
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="帮助与示例">
+    <Modal isOpen={isOpen} onClose={onClose} title="帮助与示例" hideCloseButtonOnMobile mobileFooter={mobileFooter}>
       <div className="flex flex-col md:flex-row max-h-[75vh]">
         <div className="flex-shrink-0 md:w-52 mb-6 md:mb-0 md:mr-8">
           <ul className="flex md:flex-col space-x-2 md:space-x-0 md:space-y-2 overflow-x-auto md:overflow-x-visible mobile-tab-scroll">
@@ -64,20 +82,6 @@ const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose, onLoadExample })
                     </div>
                 )}
             </div>
-
-            {activeTab !== 'manual' && (
-                <div className="block md:hidden flex-shrink-0 mt-auto pt-6 border-t border-slate-200 dark:border-slate-800">
-                    <div className="text-center">
-                        <button
-                            onClick={() => onLoadExample(activeTab as ExampleName)}
-                            className="inline-flex items-center justify-center px-6 py-3 bg-emerald-600 text-white font-semibold rounded-full hover:bg-emerald-500 transition-colors shadow-lg hover:shadow-emerald-500/30"
-                        >
-                            <UploadIcon className="h-5 w-5 mr-2" />
-                            加载此示例到画布
-                        </button>
-                    </div>
-                </div>
-            )}
         </div>
       </div>
        <style>{`

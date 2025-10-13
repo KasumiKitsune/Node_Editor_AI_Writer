@@ -1,9 +1,9 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import Modal from './Modal';
 // FIX: Added default import for MarkdownRenderer to resolve reference error.
 import MarkdownRenderer, { renderLineWithInlineFormatting } from './MarkdownRenderer';
 import { StructuredOutline, Chapter } from '../types';
-import { CopyIcon, DownloadIcon, UndoIcon, RedoIcon, EyeIcon, DocumentDiffIcon } from './icons';
+import { CopyIcon, DownloadIcon, UndoIcon, RedoIcon, EyeIcon, CompareIcon, ChevronDownIcon, SendIcon } from './icons';
 
 interface Heading {
   id: string;
@@ -68,12 +68,97 @@ interface ResultModalsProps {
     onUndo: () => void;
     onRedo: () => void;
     onClose: () => void;
+    onBack?: () => void;
     onGenerateStory: () => void;
     onCopy: (content: string) => void;
-    onDownload: (content: string, filename: string) => void;
+    onDownload: (type: 'outline' | 'story', format: 'txt' | 'json' | 'md' | 'docx') => void;
     onTocClick: (id: string) => void;
     onHeadingsParse: (headings: Heading[]) => void;
 }
+
+interface DownloadDropdownProps {
+    assetType: 'outline' | 'story';
+    onSelectFormat: (format: any) => void;
+}
+
+const DownloadDropdown: React.FC<DownloadDropdownProps> = ({ assetType, onSelectFormat }) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const dropdownRef = React.useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+                setIsOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+    const options = assetType === 'outline'
+        ? [{ label: '纯文本 (.txt)', format: 'txt' }, { label: '源数据 (.json)', format: 'json' }]
+        : [{ label: '纯文本 (.txt)', format: 'txt' }, { label: 'Markdown (.md)', format: 'md' }, { label: 'Word (.docx)', format: 'docx' }];
+
+    return (
+        <div className="relative" ref={dropdownRef}>
+            <button
+                onClick={() => setIsOpen(!isOpen)}
+                className="w-10 h-10 flex items-center justify-center rounded-full bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-slate-100 transition-colors"
+                title="下载"
+            >
+                <DownloadIcon className="h-5 w-5" />
+            </button>
+            {isOpen && (
+                <div className="absolute z-10 top-full right-0 mt-2 w-48 bg-slate-50 dark:bg-slate-800 rounded-2xl shadow-lg border border-slate-200 dark:border-slate-700 animate-scale-in" style={{ animationDuration: '150ms' }}>
+                    <ul className="p-2 space-y-1">
+                        {options.map(option => (
+                            <li
+                                key={option.format}
+                                onClick={() => { onSelectFormat(option.format); setIsOpen(false); }}
+                                className="px-3 py-2 text-sm rounded-xl cursor-pointer text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                            >
+                                {option.label}
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            )}
+        </div>
+    );
+};
+
+const PieChartProgress: React.FC<{ progress: number }> = ({ progress }) => {
+    const size = 24;
+    const strokeWidth = 3;
+    const radius = (size - strokeWidth) / 2;
+    const circumference = 2 * Math.PI * radius;
+    const offset = circumference - (progress / 100) * circumference;
+
+    return (
+        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="transform -rotate-90">
+            <circle
+                className="stroke-current opacity-30"
+                strokeWidth={strokeWidth}
+                fill="transparent"
+                r={radius}
+                cx={size / 2}
+                cy={size / 2}
+            />
+            <circle
+                className="stroke-current"
+                strokeWidth={strokeWidth}
+                strokeDasharray={circumference}
+                strokeDashoffset={offset}
+                strokeLinecap="round"
+                fill="transparent"
+                r={radius}
+                cx={size / 2}
+                cy={size / 2}
+                style={{ transition: 'stroke-dashoffset 0.3s ease-in-out' }}
+            />
+        </svg>
+    );
+};
 
 const ResultModals: React.FC<ResultModalsProps> = ({
     modalContent,
@@ -95,6 +180,7 @@ const ResultModals: React.FC<ResultModalsProps> = ({
     onUndo,
     onRedo,
     onClose,
+    onBack,
     onGenerateStory,
     onCopy,
     onDownload,
@@ -103,6 +189,17 @@ const ResultModals: React.FC<ResultModalsProps> = ({
 }) => {
     
     const [viewMode, setViewMode] = useState<'diff' | 'read'>('read');
+    const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+    // Auto-resize textarea
+    useEffect(() => {
+        const ta = textareaRef.current;
+        if (ta) {
+            ta.style.height = 'auto'; // Reset height to recalculate
+            const scrollHeight = ta.scrollHeight;
+            ta.style.height = `${scrollHeight}px`;
+        }
+    }, [revisionPrompt]); // Rerun when text changes
     
     useEffect(() => {
         if ((modalContent === 'outline' && previousOutline) || (modalContent === 'story' && previousStory)) {
@@ -145,10 +242,10 @@ const ResultModals: React.FC<ResultModalsProps> = ({
     const getHighlightClass = (isChanged: boolean) => (showDiff && isChanged) ? 'bg-amber-200/50 dark:bg-amber-400/20 p-1 -m-1 rounded-md' : '';
 
     const modalHeaderActions = (
-        <>
+        <div className="flex items-center space-x-2">
             <button onClick={() => onCopy(modalContent === 'outline' ? JSON.stringify(outline, null, 2) : story)} className="w-10 h-10 flex items-center justify-center rounded-full bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-slate-100 transition-colors" title="复制"><CopyIcon className="h-5 w-5"/></button>
-            <button onClick={() => onDownload(modalContent === 'outline' ? JSON.stringify(outline, null, 2) : story, `${(outline?.title || 'content')}`)} className="w-10 h-10 flex items-center justify-center rounded-full bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-slate-100 transition-colors" title="下载"><DownloadIcon className="h-5 w-5"/></button>
-        </>
+            <DownloadDropdown assetType={modalContent!} onSelectFormat={(format) => onDownload(modalContent!, format as any)} />
+        </div>
     );
 
     const renderActionButtons = () => (
@@ -159,7 +256,7 @@ const ResultModals: React.FC<ResultModalsProps> = ({
                         <button onClick={onUndo} disabled={!canUndo || isRevising} className="p-3 bg-slate-200 dark:bg-slate-800 rounded-full disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors" title="撤销"><UndoIcon className="h-5 w-5"/></button>
                         <button onClick={onRedo} disabled={!canRedo || isRevising} className="p-3 bg-slate-200 dark:bg-slate-800 rounded-full disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors" title="重做"><RedoIcon className="h-5 w-5"/></button>
                         <button onClick={() => setViewMode(v => v === 'diff' ? 'read' : 'diff')} disabled={!hasPreviousVersion} className="p-3 bg-slate-200 dark:bg-slate-800 rounded-full disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors" title={viewMode === 'diff' ? '阅读视图' : '对比视图'}>
-                            {viewMode === 'diff' ? <EyeIcon className="h-5 w-5"/> : <DocumentDiffIcon className="h-5 w-5"/>}
+                            {viewMode === 'diff' ? <EyeIcon className="h-5 w-5"/> : <CompareIcon className="h-5 w-5"/>}
                         </button>
                     </div>
 
@@ -174,22 +271,34 @@ const ResultModals: React.FC<ResultModalsProps> = ({
                     )}
                 </div>
                 
-                <div className="flex items-center w-full">
-                    <input
+                <div className="relative w-full bg-slate-200 dark:bg-slate-800 rounded-[28px] transition-all duration-200 focus-within:ring-2 focus-within:ring-blue-500/80">
+                    <textarea
+                        ref={textareaRef}
                         id="revision-prompt"
                         value={revisionPrompt}
                         onChange={(e) => onRevisionPromptChange(e.target.value)}
-                        placeholder="迭代修改需求..."
-                        className="w-full h-12 bg-slate-200 dark:bg-slate-800 text-sm p-4 rounded-l-full focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors disabled:bg-slate-300 dark:disabled:bg-slate-800"
+                        onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); onRevise(); } }}
+                        placeholder="迭代修改需求 (Ctrl+Enter 发送)"
+                        className="w-full bg-transparent text-slate-900 dark:text-slate-100 text-base border-none focus:outline-none focus:ring-0 disabled:bg-transparent placeholder-slate-500 dark:placeholder-slate-400 resize-none overflow-y-hidden p-4 pr-28 box-border"
                         disabled={isRevising}
+                        rows={1}
                     />
-                    <button
-                        onClick={onRevise}
-                        disabled={isRevising || !revisionPrompt.trim()}
-                        className="px-5 h-12 w-24 bg-purple-600 text-white font-semibold rounded-r-full hover:bg-purple-500 transition-colors disabled:bg-slate-400 dark:disabled:bg-slate-600 flex items-center justify-center flex-shrink-0"
-                    >
-                        {isRevising ? <span className="text-xs font-normal">{`${progress}%`}</span> : '修改'}
-                    </button>
+                    <div className="absolute right-1.5 top-1/2 -translate-y-1/2">
+                        <button
+                            onClick={onRevise}
+                            disabled={isRevising || !revisionPrompt.trim()}
+                            className={`h-11 bg-purple-600 text-white font-semibold rounded-full hover:bg-purple-500 transition-all duration-200 disabled:bg-slate-500 dark:disabled:bg-slate-600 flex items-center justify-center flex-shrink-0 transform disabled:scale-100 ${
+                                isRevising ? 'w-11' : 'px-6 hover:scale-105'
+                            }`}
+                            aria-label="发送修改"
+                        >
+                            {isRevising ? (
+                                <PieChartProgress progress={progress} />
+                            ) : (
+                                <span>发送</span>
+                            )}
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -197,7 +306,7 @@ const ResultModals: React.FC<ResultModalsProps> = ({
 
     return (
         <>
-            <Modal isOpen={modalContent === 'outline' && !!outline} onClose={onClose} title={`故事大纲: ${outline?.title || ''}`} headerActions={modalHeaderActions}>
+            <Modal isOpen={modalContent === 'outline' && !!outline} onClose={onClose} onBack={onBack} title={`故事大纲: ${outline?.title || ''}`} headerActions={modalHeaderActions}>
                 <div className="w-full h-full flex flex-col">
                     <div className="flex-grow min-h-0 overflow-y-auto bg-slate-50/50 dark:bg-slate-900/50 text-slate-800 dark:text-slate-200 p-4 rounded-3xl border border-slate-200 dark:border-slate-800">
                         <div className="space-y-6">
@@ -257,7 +366,7 @@ const ResultModals: React.FC<ResultModalsProps> = ({
                 </div>
             </Modal>
 
-            <Modal isOpen={modalContent === 'story'} onClose={onClose} title={`故事: ${outline?.title || ''}`} headerActions={modalHeaderActions}>
+            <Modal isOpen={modalContent === 'story'} onClose={onClose} onBack={onBack} title={`故事: ${outline?.title || ''}`} headerActions={modalHeaderActions}>
                 <div className="w-full h-full flex flex-col">
                     <div className="flex flex-grow overflow-hidden gap-6 min-h-0">
                         {storyHeadings.length > 0 && (

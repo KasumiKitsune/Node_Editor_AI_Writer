@@ -1,5 +1,5 @@
 import React from 'react';
-import { XIcon } from './icons';
+import { XIcon, ChevronLeftIcon } from './icons';
 
 interface ModalProps {
   isOpen: boolean;
@@ -7,9 +7,12 @@ interface ModalProps {
   title: string;
   children: React.ReactNode;
   headerActions?: React.ReactNode;
+  hideCloseButtonOnMobile?: boolean;
+  mobileFooter?: React.ReactNode;
+  onBack?: () => void;
 }
 
-const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, headerActions }) => {
+const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, headerActions, hideCloseButtonOnMobile = false, mobileFooter, onBack }) => {
   if (!isOpen) return null;
 
   return (
@@ -19,10 +22,17 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, headerA
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex justify-between items-center p-4 md:p-6 border-b border-slate-200 dark:border-slate-800">
-          <h2 className="text-2xl font-bold text-blue-600 dark:text-blue-400 truncate pr-4">{title}</h2>
+          <div className="flex items-center min-w-0">
+            {onBack && (
+                <button onClick={onBack} className="mr-3 flex-shrink-0 w-10 h-10 flex items-center justify-center rounded-full bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-slate-100 transition-colors" title="返回">
+                  <ChevronLeftIcon className="h-6 w-6" />
+                </button>
+            )}
+            <h2 className="text-2xl font-bold text-blue-600 dark:text-blue-400 truncate">{title}</h2>
+          </div>
           <div className="flex items-center space-x-2 flex-shrink-0">
             {headerActions}
-            <button onClick={onClose} className="w-10 h-10 flex items-center justify-center rounded-full bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-slate-100 transition-colors">
+            <button onClick={onClose} className={`w-10 h-10 items-center justify-center rounded-full bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-slate-100 transition-colors ${hideCloseButtonOnMobile ? 'hidden md:flex' : 'flex'}`}>
               <XIcon className="h-6 w-6" />
             </button>
           </div>
@@ -30,6 +40,11 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, headerA
         <div className="flex-grow min-h-0 p-4 md:p-6 overflow-y-auto">
           {children}
         </div>
+        {mobileFooter && (
+            <div className="flex-shrink-0 p-4 border-t border-slate-200 dark:border-slate-800 md:hidden">
+                {mobileFooter}
+            </div>
+        )}
       </div>
     </div>
   );

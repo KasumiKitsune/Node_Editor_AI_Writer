@@ -1,9 +1,10 @@
 
+
 import React, { useState, useRef, useEffect } from 'react';
 import { STORY_PLOTS, PLOT_CATEGORIES, STORY_STYLES, STYLE_CATEGORIES, STORY_STRUCTURES, STRUCTURE_CATEGORIES } from '../constants';
 import { PLOT_DESCRIPTIONS } from '../plotDescriptions';
 import { Plot, PlotCategory, Style, StyleCategory, NodeType, StructurePlot, StructureCategory } from '../types';
-import { ChevronDownIcon, PlusIcon, BookOpenIcon, XIcon } from './icons';
+import { ChevronDownIcon, PlusIcon, BookOpenIcon, XIcon, PersonIcon, SettingIcon, EnvironmentIcon, StructureIcon, PlotIcon, StyleIcon } from './icons';
 
 interface SidebarProps {
   onAddNode: (type: NodeType, data?: any) => void;
@@ -155,6 +156,14 @@ const Sidebar: React.FC<SidebarProps> = ({ onAddNode, isOpen, onClose, dragOffse
       { id: 'plot', label: '情节' },
       { id: 'style', label: '风格' },
   ];
+  
+  const sliderColors: Record<FilterType, string> = {
+    all: 'bg-blue-600',
+    structure: 'bg-amber-500',
+    plot: 'bg-blue-600',
+    style: 'bg-pink-500',
+  };
+  const activeColor = sliderColors[activeFilter];
 
   useEffect(() => {
     const activeTabIndex = filters.findIndex(f => f.id === activeFilter);
@@ -183,12 +192,12 @@ const Sidebar: React.FC<SidebarProps> = ({ onAddNode, isOpen, onClose, dragOffse
   };
   
   const isDragging = dragOffset !== null;
-  const transitionClass = isDragging ? '' : 'transition-transform duration-300 ease-in-out';
-  // Use inline style ONLY when dragging for smooth movement
-  const transformStyle = isDragging ? { transform: `translateX(${dragOffset}px)` } : {};
-  // Use classes for open/closed states
+  const transitionClass = isDragging ? '' : 'transition-transform duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]';
   const openClosedClass = isOpen ? 'translate-x-0' : '-translate-x-full';
     
+  // FIX: Added definition for `transformStyle` to dynamically apply styles during sidebar drag gestures.
+  const transformStyle = isDragging ? { transform: `translateX(${dragOffset}px)` } : undefined;
+
   return (
     <div 
       ref={sidebarRef}
@@ -210,22 +219,22 @@ const Sidebar: React.FC<SidebarProps> = ({ onAddNode, isOpen, onClose, dragOffse
           添加作品
         </button>
         <button onClick={() => onAddNode(NodeType.CHARACTER)} className="w-full flex items-center justify-center p-3 rounded-full bg-indigo-200 dark:bg-indigo-900/80 text-indigo-800 dark:text-indigo-200 hover:bg-indigo-300 dark:hover:bg-indigo-800 transition-all duration-300 font-semibold text-sm shadow-lg hover:shadow-xl hover:-translate-y-0.5 transform">
-          <PlusIcon className="h-5 w-5 mr-2"/>
+          <PersonIcon className="h-5 w-5 mr-2"/>
           添加人物
         </button>
         <button onClick={() => onAddNode(NodeType.SETTING)} className="w-full flex items-center justify-center p-3 rounded-full bg-purple-200 dark:bg-purple-900/80 text-purple-800 dark:text-purple-200 hover:bg-purple-300 dark:hover:bg-purple-800 transition-all duration-300 font-semibold text-sm shadow-lg hover:shadow-xl hover:-translate-y-0.5 transform">
-          <PlusIcon className="h-5 w-5 mr-2"/>
+          <SettingIcon className="h-5 w-5 mr-2"/>
           添加设定
         </button>
         <button onClick={() => onAddNode(NodeType.ENVIRONMENT)} className="w-full flex items-center justify-center p-3 rounded-full bg-green-200 dark:bg-green-900/80 text-green-800 dark:text-green-200 hover:bg-green-300 dark:hover:bg-green-800 transition-all duration-300 font-semibold text-sm shadow-lg hover:shadow-xl hover:-translate-y-0.5 transform">
-          <PlusIcon className="h-5 w-5 mr-2"/>
+          <EnvironmentIcon className="h-5 w-5 mr-2"/>
           添加环境
         </button>
       </div>
 
       <div className="relative flex items-center mb-4 p-1 bg-slate-300/80 dark:bg-slate-800/80 rounded-full">
          <div
-            className="absolute top-0 h-full bg-blue-600 rounded-full shadow-lg transition-all duration-300 ease-out"
+            className={`absolute top-0 h-full ${activeColor} rounded-full shadow-lg transition-all duration-300 ease-out`}
             style={{...sliderStyle, top: '4px', bottom: '4px', height: 'auto'}}
           />
         {filters.map((filter, index) => (
@@ -244,10 +253,13 @@ const Sidebar: React.FC<SidebarProps> = ({ onAddNode, isOpen, onClose, dragOffse
         ))}
       </div>
 
-      <div className="flex-grow overflow-y-auto bg-white/50 dark:bg-slate-800/50 rounded-3xl divide-y-2 divide-slate-200 dark:divide-slate-800">
+      <div key={activeFilter} className="flex-grow overflow-y-auto bg-white/50 dark:bg-slate-800/50 rounded-3xl divide-y-2 divide-slate-200 dark:divide-slate-800 animate-content-fade">
         {(activeFilter === 'all' || activeFilter === 'structure') && (
             <div>
-                <h2 className="text-2xl font-semibold my-4 text-amber-600 dark:text-amber-400 pl-4">首尾类型</h2>
+                <h2 className="text-2xl font-semibold my-4 text-amber-600 dark:text-amber-400 pl-4 flex items-center">
+                    <StructureIcon className="h-6 w-6 mr-2" />
+                    首尾类型
+                </h2>
                 {STRUCTURE_CATEGORIES.map(category => (
                     <StructureAccordionItem
                     key={category}
@@ -260,7 +272,10 @@ const Sidebar: React.FC<SidebarProps> = ({ onAddNode, isOpen, onClose, dragOffse
         )}
         {(activeFilter === 'all' || activeFilter === 'plot') && (
             <div>
-              <h2 className="text-2xl font-semibold my-4 text-blue-600 dark:text-blue-400 pl-4">情节类型</h2>
+              <h2 className="text-2xl font-semibold my-4 text-blue-600 dark:text-blue-400 pl-4 flex items-center">
+                <PlotIcon className="h-6 w-6 mr-2" />
+                情节类型
+              </h2>
               <div className="px-4 py-2">
                  <div className="flex space-x-2">
                     <input 
@@ -288,7 +303,10 @@ const Sidebar: React.FC<SidebarProps> = ({ onAddNode, isOpen, onClose, dragOffse
         )}
         {(activeFilter === 'all' || activeFilter === 'style') && (
             <div>
-              <h2 className="text-2xl font-semibold my-4 text-pink-600 dark:text-pink-400 pl-4">风格类型</h2>
+              <h2 className="text-2xl font-semibold my-4 text-pink-600 dark:text-pink-400 pl-4 flex items-center">
+                <StyleIcon className="h-6 w-6 mr-2" />
+                风格类型
+              </h2>
                <div className="px-4 py-2">
                  <div className="flex space-x-2">
                     <input 
@@ -316,12 +334,12 @@ const Sidebar: React.FC<SidebarProps> = ({ onAddNode, isOpen, onClose, dragOffse
         )}
       </div>
        <style>{`
-        @keyframes fade-in {
-          0% { opacity: 0; transform: translateY(-5px); }
+        @keyframes content-fade {
+          0% { opacity: 0; transform: translateY(10px); }
           100% { opacity: 1; transform: translateY(0); }
         }
-        .animate-fade-in {
-          animation: fade-in 0.3s ease-out forwards;
+        .animate-content-fade {
+          animation: content-fade 0.4s ease-out forwards;
         }
       `}</style>
     </div>

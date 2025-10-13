@@ -1,5 +1,5 @@
 {
-  "name": "AI作品节点编辑器",
-  "description": "一个节点编辑器视图的app，用户可以组合36种故事情节，设定人物和背景，并使用AI来创作故事大纲和正文。",
+  "name": "Genodel - 节外生文",
+  "description": "一个将节点编辑器视图和AI写作融合的的app，用户可以组合多种故事情节和风格类型，设定人物和背景，并使用AI来创作故事大纲和正文。",
   "requestFramePermissions": []
 }

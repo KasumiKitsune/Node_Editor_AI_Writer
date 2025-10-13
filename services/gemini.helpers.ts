@@ -59,7 +59,7 @@ export function serializeGraph(nodes: Node[], edges: Edge[]): string {
     serialized += "**人物设定:**\n";
     characters.forEach((char, index) => {
       serialized += `*   **${char.data.title || `人物 ${index + 1}`}:**\n`;
-      char.data.fields.forEach(field => {
+      (char.data.fields || []).forEach(field => {
         if(field.key && field.value) serialized += `    *   ${field.key}: ${field.value}\n`;
       });
     });
@@ -74,7 +74,7 @@ export function serializeGraph(nodes: Node[], edges: Edge[]): string {
         const structureText = setting.data.narrativeStructure === 'dual' ? '双线叙事' : '明暗双线叙事';
         serialized += `    *   叙事脉络: ${structureText}\n`;
       }
-      setting.data.fields.forEach(field => {
+      (setting.data.fields || []).forEach(field => {
         if(field.key && field.value) serialized += `    *   ${field.key}: ${field.value}\n`;
       });
     });
@@ -85,7 +85,7 @@ export function serializeGraph(nodes: Node[], edges: Edge[]): string {
     serialized += "**环境/地点设定:**\n";
     environments.forEach((env, index) => {
       serialized += `*   **${env.data.title || `地点 ${index + 1}`}:**\n`;
-      env.data.fields.forEach(field => {
+      (env.data.fields || []).forEach(field => {
         if(field.key && field.value) serialized += `    *   ${field.key}: ${field.value}\n`;
       });
     });
@@ -207,12 +207,12 @@ export const getBasePrompt = (nodes: Node[]): { systemInstruction: string, taskI
 };
 
 export const serializeLibraryForPrompt = () => {
-    let text = "可用情节库:\n";
-    STORY_PLOTS.forEach(p => text += `- id: ${p.id}, name: ${p.name}\n`);
-    text += "\n可用风格库:\n";
-    STORY_STYLES.forEach(s => text += `- id: ${s.id}, name: ${s.name}, category: ${s.category}\n`);
-    text += "\n可用结构库:\n";
-    STORY_STRUCTURES.forEach(s => text += `- id: ${s.id}, name: ${s.name}, category: ${s.category}\n`);
+    let text = "可用情节库 (Plots):\n";
+    STORY_PLOTS.forEach(p => text += `- id: ${p.id}, name: "${p.name}", description: "${p.description}"\n`);
+    text += "\n可用风格库 (Styles):\n";
+    STORY_STYLES.forEach(s => text += `- id: ${s.id}, name: "${s.name}", description: "${s.description}", category: "${s.category}"\n`);
+    text += "\n可用结构库 (Structures):\n";
+    STORY_STRUCTURES.forEach(s => text += `- id: ${s.id}, name: "${s.name}", description: "${s.description}", category: "${s.category}"\n`);
     return text;
 };
 
@@ -235,4 +235,32 @@ export const serializeExistingNodesForContext = (nodes: Node[]): string => {
     if (works.length > 0) context += `- 作品: ${works.join(', ')}\n`;
 
     return context;
+}
+
+export function serializeGraphForAssistant(nodes: Node[], edges: Edge[]): string {
+    let serialized = "NODES:\n";
+    if (nodes.length === 0) {
+        serialized += "The canvas is empty.\n";
+    } else {
+        nodes.forEach(node => {
+            const data = node.data as any;
+            serialized += `- Title: "${data.title}", Type: ${node.type}, ID: ${node.id}\n`;
+        });
+    }
+
+    serialized += "\nEDGES:\n";
+    if (edges.length === 0) {
+        serialized += "There are no connections.\n";
+    } else {
+        edges.forEach(edge => {
+            const sourceNode = nodes.find(n => n.id === edge.source);
+            const targetNode = nodes.find(n => n.id === edge.target);
+            if (sourceNode && targetNode) {
+                const sourceTitle = (sourceNode.data as any).title;
+                const targetTitle = (targetNode.data as any).title;
+                serialized += `- From: "${sourceTitle}" (ID: ${edge.source}) To: "${targetTitle}" (ID: ${edge.target})\n`;
+            }
+        });
+    }
+    return serialized;
 }

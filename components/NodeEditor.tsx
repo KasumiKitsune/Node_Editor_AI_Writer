@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useCallback, MouseEvent, TouchEvent, useEffect } from 'react';
 import { Node, Edge, NodeType, SettingNodeData, WorkNodeData } from '../types';
 import NodeComponent from './NodeComponent';
@@ -15,6 +16,7 @@ interface NodeEditorProps {
   onToggleNodeCollapse: (nodeId: string) => void;
   onAnalyzeWork: (nodeId: string, content: string) => void;
   onExpandSetting: (nodeId: string) => void;
+  onNodeSelect: (nodeId: string) => void;
   activeProgressTask: string | null;
   progress: number;
   editorRef: React.RefObject<HTMLDivElement>;
@@ -32,7 +34,7 @@ const getMidpoint = (touches: React.TouchList) => {
     return { x: (t1.clientX + t2.clientX) / 2, y: (t1.clientY + t2.clientY) / 2 };
 }
 
-const NodeEditor: React.FC<NodeEditorProps> = ({ nodes, edges, transform, setTransform, onNodesChange, onEdgesChange, onUpdateNodeData, onDeleteNode, onToggleNodeCollapse, onAnalyzeWork, onExpandSetting, activeProgressTask, progress, editorRef, highlightedNodeId, setHighlightedNodeId }) => {
+const NodeEditor: React.FC<NodeEditorProps> = ({ nodes, edges, transform, setTransform, onNodesChange, onEdgesChange, onUpdateNodeData, onDeleteNode, onToggleNodeCollapse, onAnalyzeWork, onExpandSetting, onNodeSelect, activeProgressTask, progress, editorRef, highlightedNodeId, setHighlightedNodeId }) => {
   const [draggingNode, setDraggingNode] = useState<{ id: string; offset: { x: number; y: number } } | null>(null);
   const [connecting, setConnecting] = useState<{ sourceId: string; sourceHandleId?: string; targetPos: { x: number; y: number } } | null>(null);
   const [isPanning, setIsPanning] = useState(false);
@@ -84,9 +86,6 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ nodes, edges, transform, setTra
     const isTouchEvent = 'touches' in e;
     const target = (isTouchEvent ? e.targetTouches[0]?.target : e.target) as HTMLElement;
 
-    // Prioritize node interactions (drag, connect) over sidebar gestures on mobile.
-    // If the touch starts on any part of a node, stop the event from bubbling
-    // up to the App's root div, which handles the sidebar swipe gesture.
     if (isTouchEvent && target.closest('[data-node-id]')) {
         e.stopPropagation();
     }
@@ -116,6 +115,10 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ nodes, edges, transform, setTra
     const isSidebarDragArea = isTouchEvent && evt.clientX < 80;
     const shouldStartPan = (isSpacePressedRef.current && !nodeId) || (isTouchEvent && isBackground && !nodeId && !isSidebarDragArea);
 
+    if (nodeId) {
+        onNodeSelect(nodeId);
+        document.body.style.userSelect = 'none';
+    }
 
     if (shouldStartPan) {
         setIsPanning(true);
@@ -125,10 +128,6 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ nodes, edges, transform, setTra
         });
         if (!isTouchEvent) document.body.style.cursor = 'grabbing';
         return;
-    }
-
-    if (nodeId) {
-      document.body.style.userSelect = 'none';
     }
 
     if (handle && nodeId) {
@@ -151,9 +150,8 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ nodes, edges, transform, setTra
         id: nodeId,
         offset: { x: transformedPos.x - node.position.x, y: transformedPos.y - node.position.y },
       });
-      // Set cursor on the drag handle itself via CSS, so no need to set body cursor
     }
-  }, [nodes, transform, highlightedNodeId, setHighlightedNodeId]);
+  }, [nodes, transform, onNodeSelect, highlightedNodeId, setHighlightedNodeId]);
 
   const handleInteractionMove = useCallback((e: MouseEvent<HTMLDivElement> | TouchEvent<HTMLDivElement>) => {
     const isTouchEvent = 'touches' in e;
@@ -190,7 +188,6 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ nodes, edges, transform, setTra
     if (isPanning) {
         const newX = evt.clientX - panStart.x;
         const newY = evt.clientY - panStart.y;
-        // FIX: Corrected the call to `setTransform` to pass an object instead of a function, resolving a TypeScript type error. The updated call now uses the existing `transform` prop to preserve the scale while updating x and y coordinates.
         setTransform({ ...transform, x: newX, y: newY });
         return;
     }
@@ -253,7 +250,6 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ nodes, edges, transform, setTra
                     target: targetNodeId,
                     targetHandle: targetHandleId,
                 };
-                // Avoid duplicate edges for the same handles
                 if (!edges.some(edge => edge.source === newEdge.source && edge.sourceHandle === newEdge.sourceHandle && edge.target === newEdge.target && edge.targetHandle === newEdge.targetHandle)) {
                     onEdgesChange([...edges, newEdge]);
                 }
@@ -286,49 +282,49 @@ const NodeEditor: React.FC<NodeEditorProps> = ({ nodes, edges, transform, setTra
           y: node.position.y + yOffset,
       };
   };
-
-  const getEdgeParams = (edge: Edge) => {
-    const sourceNode = nodes.find(n => n.id === edge.source);
-    const targetNode = nodes.find(n => n.id === edge.target);
-    const sourceEl = editorRef.current?.querySelector(`[data-node-id="${edge.source}"]`) as HTMLElement;
-    const targetEl = editorRef.current?.querySelector(`[data-node-id="${edge.target}"]`) as HTMLElement;
-    
-    if (!sourceNode || !targetNode || !sourceEl || !targetEl) return null;
-
-    const sourcePos = getSourceHandlePosition(sourceNode, sourceEl, edge.sourceHandle);
-    const targetPos = getTargetHandlePosition(targetNode, targetEl, edge.targetHandle);
-    
-    return { sourcePos, targetPos };
-  }
   
-  const getEdgePath = (edge: Edge): string => {
-    const params = getEdgeParams(edge);
-    if (!params) return '';
-    const { sourcePos, targetPos } = params;
-    
-    const dx = targetPos.x - sourcePos.x;
-    const curve = ` C ${sourcePos.x + dx * 0.5} ${sourcePos.y}, ${targetPos.x - dx * 0.5} ${targetPos.y},`;
-    return `M ${sourcePos.x} ${sourcePos.y}${curve} ${targetPos.x} ${targetPos.y}`;
-  };
+    const getEdgeParams = (edge: Edge) => {
+        const sourceNode = nodes.find(n => n.id === edge.source);
+        const targetNode = nodes.find(n => n.id === edge.target);
+        const sourceEl = editorRef.current?.querySelector(`[data-node-id="${edge.source}"]`) as HTMLElement;
+        const targetEl = editorRef.current?.querySelector(`[data-node-id="${edge.target}"]`) as HTMLElement;
+        
+        if (!sourceNode || !targetNode || !sourceEl || !targetEl) return null;
 
-  const getCurveMidpoint = (edge: Edge) => {
-    const params = getEdgeParams(edge);
-    if (!params) return { x: 0, y: 0 };
-    const { sourcePos, targetPos } = params;
-
-    const dx = targetPos.x - sourcePos.x;
-    const p0 = sourcePos;
-    const p1 = { x: sourcePos.x + dx * 0.5, y: sourcePos.y };
-    const p2 = { x: targetPos.x - dx * 0.5, y: targetPos.y };
-    const p3 = targetPos;
-    
-    const t = 0.5;
-    const x = Math.pow(1 - t, 3) * p0.x + 3 * Math.pow(1 - t, 2) * t * p1.x + 3 * (1 - t) * Math.pow(t, 2) * p2.x + Math.pow(t, 3) * p3.x;
-    const y = Math.pow(1 - t, 3) * p0.y + 3 * Math.pow(1 - t, 2) * t * p1.y + 3 * (1 - t) * Math.pow(t, 2) * p2.y + Math.pow(t, 3) * p3.y;
-    
-    return { x, y };
-  };
+        const sourcePos = getSourceHandlePosition(sourceNode, sourceEl, edge.sourceHandle);
+        const targetPos = getTargetHandlePosition(targetNode, targetEl, edge.targetHandle);
+        
+        return { sourcePos, targetPos };
+    }
   
+    const getEdgePath = (edge: Edge): string => {
+        const params = getEdgeParams(edge);
+        if (!params) return '';
+        const { sourcePos, targetPos } = params;
+        
+        const dx = targetPos.x - sourcePos.x;
+        const curve = ` C ${sourcePos.x + dx * 0.5} ${sourcePos.y}, ${targetPos.x - dx * 0.5} ${targetPos.y},`;
+        return `M ${sourcePos.x} ${sourcePos.y}${curve} ${targetPos.x} ${targetPos.y}`;
+    };
+
+    const getCurveMidpoint = (edge: Edge) => {
+        const params = getEdgeParams(edge);
+        if (!params) return { x: 0, y: 0 };
+        const { sourcePos, targetPos } = params;
+
+        const dx = targetPos.x - sourcePos.x;
+        const p0 = sourcePos;
+        const p1 = { x: sourcePos.x + dx * 0.5, y: sourcePos.y };
+        const p2 = { x: targetPos.x - dx * 0.5, y: targetPos.y };
+        const p3 = targetPos;
+        
+        const t = 0.5;
+        const x = Math.pow(1 - t, 3) * p0.x + 3 * Math.pow(1 - t, 2) * t * p1.x + 3 * (1 - t) * Math.pow(t, 2) * p2.x + Math.pow(t, 3) * p3.x;
+        const y = Math.pow(1 - t, 3) * p0.y + 3 * Math.pow(1 - t, 2) * t * p1.y + 3 * (1 - t) * Math.pow(t, 2) * p2.y + Math.pow(t, 3) * p3.y;
+        
+        return { x, y };
+    };
+
   const getConnectingPath = (): string => {
     if (!connecting) return '';
     const sourceNode = nodes.find(n => n.id === connecting.sourceId);

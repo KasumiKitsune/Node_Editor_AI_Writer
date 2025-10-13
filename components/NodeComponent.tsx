@@ -40,7 +40,7 @@ const PlotNode: React.FC<{ node: Node<PlotNodeData>, onUpdateData: (data: PlotNo
             <div className={`grid transition-[grid-template-rows] duration-200 ease-in-out`} style={{ gridTemplateRows: isCollapsed ? '0fr' : '1fr' }}>
                 <div className="overflow-hidden">
                     <div className="p-4 space-y-3 text-sm">
-                        <p className="text-slate-600 dark:text-slate-300 text-base">{node.data.description}</p>
+                        <p className="text-slate-600 dark:text-slate-400/80 text-base max-h-48 overflow-y-auto transition-colors duration-200 hover:text-slate-800 dark:hover:text-slate-200 whitespace-pre-line">{node.data.description}</p>
                         <textarea
                             placeholder="添加额外需求..."
                             value={node.data.userInput || ''}
@@ -67,7 +67,7 @@ const StructureNode: React.FC<{ node: Node<StructureNodeData>, onUpdateData: (da
             <div className={`grid transition-[grid-template-rows] duration-200 ease-in-out`} style={{ gridTemplateRows: isCollapsed ? '0fr' : '1fr' }}>
                 <div className="overflow-hidden">
                     <div className="p-4 space-y-3 text-sm">
-                        <p className="text-slate-600 dark:text-slate-300 italic text-base">{node.data.description}</p>
+                        <p className="text-slate-600 dark:text-slate-400/80 text-base max-h-48 overflow-y-auto transition-colors duration-200 hover:text-slate-800 dark:hover:text-slate-200 whitespace-pre-line">{node.data.description}</p>
                         <textarea
                             placeholder="添加额外需求..."
                             value={node.data.userInput || ''}
@@ -85,6 +85,8 @@ const StructureNode: React.FC<{ node: Node<StructureNodeData>, onUpdateData: (da
 
 
 const StyleNode: React.FC<{ node: Node<StyleNodeData>, onUpdateData: (data: StyleNodeData) => void, isCollapsed?: boolean }> = ({ node, onUpdateData, isCollapsed }) => {
+    const [isSelectOpen, setIsSelectOpen] = useState(false);
+
     const handleMethodChange = (value: string) => {
         onUpdateData({ ...node.data, applicationMethod: value as 'appropriate' | 'full_section' });
     };
@@ -98,9 +100,9 @@ const StyleNode: React.FC<{ node: Node<StyleNodeData>, onUpdateData: (data: Styl
         <>
             <Header className="bg-pink-200 text-pink-900 dark:bg-pink-950 dark:text-pink-200 node-drag-handle">{node.data.title}</Header>
             <div className={`grid transition-[grid-template-rows] duration-200 ease-in-out`} style={{ gridTemplateRows: isCollapsed ? '0fr' : '1fr' }}>
-                <div className="overflow-hidden">
+                <div className={isSelectOpen ? 'overflow-visible' : 'overflow-hidden'}>
                     <div className="p-4 space-y-3 text-sm">
-                        <p className="text-slate-600 dark:text-slate-300 italic text-base">{node.data.description}</p>
+                        <p className="text-slate-600 dark:text-slate-400/80 text-base max-h-48 overflow-y-auto transition-colors duration-200 hover:text-slate-800 dark:hover:text-slate-200 whitespace-pre-line">{node.data.description}</p>
                         <div className="flex items-center space-x-2 pt-2">
                             <label htmlFor={`style-method-${node.id}`} className="text-sm font-medium text-slate-500 dark:text-slate-300">应用方式:</label>
                             <CustomSelect
@@ -108,6 +110,7 @@ const StyleNode: React.FC<{ node: Node<StyleNodeData>, onUpdateData: (data: Styl
                                 options={styleMethodOptions}
                                 value={node.data.applicationMethod}
                                 onChange={handleMethodChange}
+                                onToggleOpen={setIsSelectOpen}
                             />
                         </div>
                     </div>
@@ -139,7 +142,7 @@ const EditableNode: React.FC<{
   }, [isEditingTitle]);
   
   const handleFieldChange = (fieldId: string, keyOrValue: 'key' | 'value', value: string) => {
-    const newFields = node.data.fields.map(f =>
+    const newFields = (node.data.fields || []).map(f =>
       f.id === fieldId ? { ...f, [keyOrValue]: value } : f
     );
     onUpdateData({ ...node.data, fields: newFields });
@@ -147,11 +150,11 @@ const EditableNode: React.FC<{
 
   const addField = () => {
     const newField: KeyValueField = { id: `field_${Date.now()}`, key: '', value: '' };
-    onUpdateData({ ...node.data, fields: [...node.data.fields, newField] });
+    onUpdateData({ ...node.data, fields: [...(node.data.fields || []), newField] });
   };
 
   const removeField = (fieldId: string) => {
-    const newFields = node.data.fields.filter(f => f.id !== fieldId);
+    const newFields = (node.data.fields || []).filter(f => f.id !== fieldId);
     onUpdateData({ ...node.data, fields: newFields });
   };
 
@@ -202,7 +205,7 @@ const EditableNode: React.FC<{
                             />
                         </div>
                     )}
-                    {node.data.fields.map(field => (
+                    {(node.data.fields || []).map(field => (
                     <div key={field.id} className="flex items-center space-x-2">
                         <input
                         type="text"
@@ -316,6 +319,7 @@ const WorkNode: React.FC<{
                             draggable="false"
                             className="w-full bg-slate-200 dark:bg-slate-700/50 text-sm p-3 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-y transition-colors"
                             rows={8}
+                            onWheel={(e) => e.stopPropagation()}
                         />
                         <div className="flex w-full bg-slate-200 dark:bg-slate-800/80 rounded-full p-1 space-x-1">
                             {(['rewrite', 'continue', 'parody'] as const).map(mode => (
@@ -402,7 +406,7 @@ const NodeComponent: React.FC<NodeComponentProps> = ({ node, onUpdateData, onDel
   };
 
   const renderSourceHandles = () => {
-    const baseHandleClasses = "absolute -right-2.5 top-1/2 -translate-y-1/2 w-5 h-5 border-2 border-white dark:border-slate-800 cursor-crosshair transition-transform hover:scale-125";
+    const baseHandleClasses = "absolute -right-3 top-1/2 -translate-y-1/2 w-6 h-6 border-2 border-white dark:border-slate-800 cursor-crosshair transition-transform hover:scale-125";
     const flowHandleColor = "bg-blue-500 dark:bg-blue-400";
 
     switch (node.type) {
@@ -416,8 +420,8 @@ const NodeComponent: React.FC<NodeComponentProps> = ({ node, onUpdateData, onDel
             }
             const handleBColor = data.narrativeStructure === 'light_dark' ? 'bg-slate-500' : `${flowHandleColor}`;
             return <>
-                <div data-handle="source" data-handle-id="source_a" className={`absolute -right-2.5 top-1/3 -translate-y-1/2 w-5 h-5 ${flowHandleColor} rounded-full border-2 border-white dark:border-slate-800 cursor-crosshair transition-transform hover:scale-125`} title="故事线 A / 明线" />
-                <div data-handle="source" data-handle-id="source_b" className={`absolute -right-2.5 top-2/3 -translate-y-1/2 w-5 h-5 ${handleBColor} rounded-full border-2 border-white dark:border-slate-800 cursor-crosshair transition-transform hover:scale-125`} title="故事线 B / 暗线" />
+                <div data-handle="source" data-handle-id="source_a" className={`absolute -right-3 top-1/3 -translate-y-1/2 w-6 h-6 ${flowHandleColor} rounded-full border-2 border-white dark:border-slate-800 cursor-crosshair transition-transform hover:scale-125`} title="故事线 A / 明线" />
+                <div data-handle="source" data-handle-id="source_b" className={`absolute -right-3 top-2/3 -translate-y-1/2 w-6 h-6 ${handleBColor} rounded-full border-2 border-white dark:border-slate-800 cursor-crosshair transition-transform hover:scale-125`} title="故事线 B / 暗线" />
             </>;
 
         case NodeType.PLOT:
@@ -453,22 +457,22 @@ const NodeComponent: React.FC<NodeComponentProps> = ({ node, onUpdateData, onDel
         case NodeType.PLOT:
              if (node.isCollapsed) {
                 return <div data-handle="target" data-handle-id="flow" title="流程/风格" className={`${baseTargetClasses}`}>
-                    <div className="w-5 h-5 bg-slate-400 rounded-lg border-2 border-white dark:border-slate-800 pointer-events-none" />
+                    <div className="w-6 h-6 bg-slate-400 rounded-lg border-2 border-white dark:border-slate-800 pointer-events-none" />
                 </div>
              }
             return <>
                 <div data-handle="target" data-handle-id="flow" title="流程" className="absolute -left-5 top-1/3 -translate-y-1/2 w-10 h-10 cursor-crosshair flex items-center justify-center group">
-                    <div className={`w-5 h-5 ${flowTargetColor} rounded-full border-2 border-white dark:border-slate-800 pointer-events-none group-hover:scale-125 transition-transform ${isFlowConnectable ? 'scale-125 ring-2 ring-emerald-400' : ''}`} />
+                    <div className={`w-6 h-6 ${flowTargetColor} rounded-full border-2 border-white dark:border-slate-800 pointer-events-none group-hover:scale-125 transition-transform ${isFlowConnectable ? 'scale-125 ring-2 ring-emerald-400' : ''}`} />
                 </div>
                 <div data-handle="target" data-handle-id="style" title="风格" className="absolute -left-5 top-2/3 -translate-y-1/2 w-10 h-10 cursor-crosshair flex items-center justify-center group">
-                    <div className={`w-5 h-5 ${styleTargetColor} rounded-md border-2 border-white dark:border-slate-800 pointer-events-none group-hover:scale-125 transition-transform ${isStyleConnectable ? 'scale-125 ring-2 ring-pink-400' : ''}`} />
+                    <div className={`w-6 h-6 ${styleTargetColor} rounded-md border-2 border-white dark:border-slate-800 pointer-events-none group-hover:scale-125 transition-transform ${isStyleConnectable ? 'scale-125 ring-2 ring-pink-400' : ''}`} />
                 </div>
             </>;
         
         case NodeType.SETTING:
              return (
                 <div data-handle="target" data-handle-id="style" title="风格" className={baseTargetClasses}>
-                    <div className={`w-5 h-5 ${styleTargetColor} rounded-md border-2 border-white dark:border-slate-800 pointer-events-none group-hover:scale-125 transition-transform ${isStyleConnectable ? 'scale-125 ring-2 ring-pink-400' : ''}`} />
+                    <div className={`w-6 h-6 ${styleTargetColor} rounded-md border-2 border-white dark:border-slate-800 pointer-events-none group-hover:scale-125 transition-transform ${isStyleConnectable ? 'scale-125 ring-2 ring-pink-400' : ''}`} />
                 </div>
              );
         
@@ -477,7 +481,7 @@ const NodeComponent: React.FC<NodeComponentProps> = ({ node, onUpdateData, onDel
         case NodeType.ENVIRONMENT:
             return (
                 <div data-handle="target" data-handle-id="flow" title="流程" className={baseTargetClasses}>
-                    <div className={`w-5 h-5 ${flowTargetColor} rounded-full border-2 border-white dark:border-slate-800 pointer-events-none group-hover:scale-125 transition-transform ${isFlowConnectable ? 'scale-125 ring-2 ring-emerald-400' : ''}`} />
+                    <div className={`w-6 h-6 ${flowTargetColor} rounded-full border-2 border-white dark:border-slate-800 pointer-events-none group-hover:scale-125 transition-transform ${isFlowConnectable ? 'scale-125 ring-2 ring-emerald-400' : ''}`} />
                 </div>
             );
 
@@ -495,7 +499,7 @@ const NodeComponent: React.FC<NodeComponentProps> = ({ node, onUpdateData, onDel
       data-node-id={node.id}
     >
       <div 
-        className={`bg-white/70 dark:bg-slate-800/70 backdrop-blur-md rounded-3xl shadow-lg border border-slate-200 dark:border-slate-700/80 relative hover:shadow-2xl ${isDeleting ? 'animate-scale-out' : ''} ${!isDragging ? 'transition-all duration-300' : ''} ${highlightedNodeId === node.id ? 'node-highlight' : ''}`}
+        className={`bg-white/70 dark:bg-slate-800/70 backdrop-blur-md rounded-3xl shadow-lg border border-slate-200 dark:border-slate-700/80 relative hover:shadow-2xl ${isDeleting ? 'animate-scale-out' : ''} ${!isDragging ? 'transition-transform duration-700 ease-out' : ''} ${highlightedNodeId === node.id ? 'node-highlight' : ''}`}
       >
         <div className="node-content-wrapper relative">
             <button onClick={handleDelete} className="absolute -top-2.5 -right-2.5 w-7 h-7 flex items-center justify-center bg-slate-300 dark:bg-slate-600 text-slate-700 dark:text-slate-200 rounded-full hover:bg-red-500 hover:text-white dark:hover:bg-red-500 z-10 transition-all duration-200 hover:scale-110">

@@ -11,9 +11,12 @@ const getModelConfig = (model: string, baseConfig: any = {}) => {
     if (model === 'gemini-2.5-flash-no-thinking') {
         effectiveModel = 'gemini-2.5-flash';
         config.thinkingConfig = { thinkingBudget: 0 };
-    } else if (model === 'gemini-2.5-flash') {
+    } else if (model === 'gemini-2.5-flash' || model === 'gemini-flash-latest') {
         effectiveModel = 'gemini-2.5-flash';
+    } else if (model === 'gemini-2.5-pro') {
+        effectiveModel = 'gemini-2.5-pro';
     }
+    // Removed gemini-2.5-flash-lite as it's no longer used for the analysis step.
     return { effectiveModel, config };
 };
 
@@ -199,7 +202,7 @@ ${content}
 }
 
 async function generateNodesFromSetting(settingData: SettingNodeData, existingNodes: Node[], model: string): Promise<any> {
-    const settingText = `标题: ${settingData.title}\n` + settingData.fields.map(f => `${f.key}: ${f.value}`).join('\n');
+    const settingText = `标题: ${settingData.title}\n` + (settingData.fields || []).map(f => `${f.key}: ${f.value}`).join('\n');
     const libraryText = serializeLibraryForPrompt();
     const existingNodesContext = serializeExistingNodesForContext(existingNodes);
     const isMultiLine = settingData.narrativeStructure === 'dual' || settingData.narrativeStructure === 'light_dark';
@@ -594,5 +597,83 @@ ${story}
     } catch (error) {
         console.error("Error revising story:", error);
         throw new Error(`修改故事时出错: ${error instanceof Error ? error.message : '未知错误'}`);
+    }
+};
+
+export const modifyGraphWithAssistant = async (userPrompt: string, nodes: Node[], edges: Edge[], model: string): Promise<{nodes: Node[], edges: Edge[]}> => {
+    const systemInstruction = "You are an AI assistant for a node-based story editor. Your task is to modify a graph data structure based on a user's request. Your response MUST be the complete, final graph state as a single, valid JSON object.";
+    const validNodeTypes = Object.values(NodeType).join(', ');
+
+    const prompt = `
+You are an AI model that expertly modifies a graph data structure based on a user's request.
+Your response MUST be the complete, final graph state as a single, valid JSON object.
+
+**User's Request:**
+---
+${userPrompt}
+---
+
+**Your Task:**
+Carefully analyze the user's request and the current graph state. Modify the graph to fulfill the request. If the request is vague (e.g., "add more plot", "enrich the setting"), you must take creative initiative. Invent new, relevant nodes and connect them logically to the existing graph. Your goal is to be a helpful, proactive creative partner.
+
+**Initial Graph State (JSON):**
+---
+${JSON.stringify({ nodes, edges }, null, 2)}
+---
+
+**Node Library (for creating new standard nodes):**
+---
+${serializeLibraryForPrompt()}
+---
+
+**Connection Rules:**
+- **Flow Connections** (circle handles): Represent the story's sequence.
+    - Source Nodes: PLOT, CHARACTER, STRUCTURE, SETTING, ENVIRONMENT, WORK (rewrite/continue modes).
+    - Target Nodes: PLOT, CHARACTER, STRUCTURE, ENVIRONMENT.
+    - A PLOT node's target handle for flow is \`flow\`.
+- **Style Connections** (square handles): Apply a writing style.
+    - Source Nodes: STYLE, WORK (parody mode).
+    - Target Nodes: PLOT, SETTING.
+    - A PLOT or SETTING node's target handle for style is \`style\`.
+- **Multi-line SETTING nodes**: These have two source handles, \`source_a\` and \`source_b\`, for creating parallel storylines.
+
+**CRITICAL INSTRUCTIONS:**
+1.  **Fulfill the Request**: Apply the user's request to the initial graph state.
+2.  **Use User's Language**: When creating new nodes (titles, descriptions, fields), you MUST use the same language as the "User's Request".
+3.  **Use Node Library**: When creating a new node based on an item from the "Node Library", you MUST:
+    a. Use the library item's \`id\` for the node's \`plotId\`, \`styleId\`, or \`structureId\`.
+    b. Use the library item's \`name\` as the node's \`title\`.
+    c. Use the library item's \`description\` as the node's \`description\`.
+    For custom nodes not in the library, set the relevant id to \`-1\` and create a descriptive title and description.
+4.  **Valid Node Types**: You must only use one of the following for the \`type\` property of any new node: ${validNodeTypes}.
+5.  **Return Full State**: Your response must be a single, valid JSON object containing the *entire modified graph*, including all original nodes and edges that were not changed. The format must be: \`{ "nodes": [...], "edges": [...] }\`.
+6.  **Preserve IDs & Positions**: Retain existing \`id\` and \`position\` for all unmodified nodes.
+7.  **New Node Positioning**: For any **new nodes** you create, you can OMIT the \`position\` property. The system will auto-layout them.
+8.  **Data Completeness**: Ensure every node in the final state has a complete \`data\` object appropriate for its type (e.g., character nodes must have a \`fields\` array).
+9.  **Do Not Explain**: Do not add any text, notes, or markdown formatting outside of the final JSON object.
+`;
+
+    const { effectiveModel, config } = getModelConfig(model, {
+        systemInstruction,
+        responseMimeType: "application/json",
+    });
+
+    try {
+        const response = await ai.models.generateContent({
+            model: effectiveModel,
+            contents: prompt,
+            config: config
+        });
+        const jsonText = response.text.trim();
+        const result = JSON.parse(jsonText);
+
+        if (!result || !Array.isArray(result.nodes) || !Array.isArray(result.edges)) {
+            throw new Error("AI response did not conform to the expected {nodes: [], edges: []} structure.");
+        }
+
+        return result;
+    } catch (error) {
+        console.error("Error executing graph modification:", error);
+        throw new Error(`执行图表修改时出错: ${error instanceof Error ? error.message : '未知错误'}`);
     }
 };
