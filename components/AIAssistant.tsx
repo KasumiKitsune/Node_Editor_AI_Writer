@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { WandIcon, XIcon, SendIcon } from './icons';
 
@@ -7,13 +6,14 @@ interface AIAssistantProps {
     onClose: () => void;
     onSubmit: (prompt: string) => void;
     isProcessing: boolean;
+    progress: number;
     message: string | null;
     isAwaitingConfirmation: boolean;
     onAccept: () => void;
     onRevert: () => void;
 }
 
-const AIAssistant: React.FC<AIAssistantProps> = ({ isOpen, onClose, onSubmit, isProcessing, message, isAwaitingConfirmation, onAccept, onRevert }) => {
+const AIAssistant: React.FC<AIAssistantProps> = ({ isOpen, onClose, onSubmit, isProcessing, progress, message, isAwaitingConfirmation, onAccept, onRevert }) => {
     const [position, setPosition] = useState({ 
         x: window.innerWidth / 2 - 192, // 192 is half of the panel width (384px)
         y: window.innerHeight / 2 - 150 
@@ -23,12 +23,13 @@ const AIAssistant: React.FC<AIAssistantProps> = ({ isOpen, onClose, onSubmit, is
     const headerRef = useRef<HTMLDivElement>(null);
     
     const [inputValue, setInputValue] = useState('');
+    const [isAnimatingOut, setIsAnimatingOut] = useState(false);
+    const isInitialRender = useRef(true);
 
     useEffect(() => {
         if (isOpen) {
-            // Center the panel when it opens
             const panelWidth = containerRef.current?.offsetWidth || (window.innerWidth < 768 ? 320 : 384);
-            const panelHeight = containerRef.current?.offsetHeight || 250; // Approximate height
+            const panelHeight = containerRef.current?.offsetHeight || 250;
             setPosition({
                 x: window.innerWidth / 2 - panelWidth / 2,
                 y: window.innerHeight / 2 - panelHeight / 2,
@@ -36,10 +37,28 @@ const AIAssistant: React.FC<AIAssistantProps> = ({ isOpen, onClose, onSubmit, is
         }
     }, [isOpen]);
 
+    useEffect(() => {
+        // Prevent exit animation on initial load when isOpen is false
+        if (isInitialRender.current) {
+          isInitialRender.current = false;
+          return;
+        }
+
+        if (!isOpen) {
+            setIsAnimatingOut(true);
+            const timer = setTimeout(() => setIsAnimatingOut(false), 200); // Animation duration
+            return () => clearTimeout(timer);
+        }
+    }, [isOpen]);
+    
+    const handleClose = () => {
+        setIsAnimatingOut(true);
+        setTimeout(onClose, 200);
+    };
+
     const handleDragStart = (e: React.MouseEvent | React.TouchEvent) => {
         if (headerRef.current && headerRef.current.contains(e.target as Node)) {
             if ('touches' in e && e.cancelable) {
-                // Prevent page scroll when starting drag on touch devices
                 e.preventDefault();
             }
             const point = 'touches' in e ? e.touches[0] : e;
@@ -53,7 +72,6 @@ const AIAssistant: React.FC<AIAssistantProps> = ({ isOpen, onClose, onSubmit, is
     const handleDragMove = useCallback((e: MouseEvent | TouchEvent) => {
         if (dragRef.current && containerRef.current) {
             if ('touches' in e && e.cancelable) {
-                // Prevent page scroll while dragging on touch devices
                 e.preventDefault();
             }
             const point = 'touches' in e ? e.touches[0] : e;
@@ -64,7 +82,6 @@ const AIAssistant: React.FC<AIAssistantProps> = ({ isOpen, onClose, onSubmit, is
 
             const containerRect = containerRef.current.getBoundingClientRect();
             
-            // Clamp position to be within viewport
             const clampedY = Math.max(16, Math.min(newY, window.innerHeight - containerRect.height - 16));
             const clampedX = Math.max(16, Math.min(newX, window.innerWidth - containerRect.width - 16));
 
@@ -101,18 +118,17 @@ const AIAssistant: React.FC<AIAssistantProps> = ({ isOpen, onClose, onSubmit, is
         }
     };
 
-    if (!isOpen) {
+    if (!isOpen && !isAnimatingOut) {
         return null;
     }
 
     return (
         <div
             ref={containerRef}
-            className={`fixed z-40 w-80 md:w-96 bg-slate-200/70 dark:bg-slate-900/70 backdrop-blur-xl rounded-3xl shadow-2xl border border-slate-300/50 dark:border-slate-700/50 p-4 flex flex-col animate-scale-in`}
+            className={`fixed z-40 w-80 md:w-96 bg-slate-200/70 dark:bg-slate-900/70 backdrop-blur-xl rounded-3xl shadow-2xl border border-slate-300/50 dark:border-slate-700/50 p-4 flex flex-col ${isOpen && !isAnimatingOut ? 'animate-scale-in' : 'animate-scale-out'}`}
             style={{ 
                 left: position.x, 
                 top: position.y,
-                animationDuration: '200ms',
                 touchAction: 'none'
             }}
             onMouseDown={handleDragStart}
@@ -122,13 +138,13 @@ const AIAssistant: React.FC<AIAssistantProps> = ({ isOpen, onClose, onSubmit, is
                 ref={headerRef}
                 className="flex justify-between items-center mb-3 cursor-grab"
             >
-                <h4 className="font-bold text-lg text-blue-600 dark:text-blue-400 flex items-center">
+                <h4 className="font-bold text-lg text-monet-dark dark:text-blue-400 flex items-center">
                     <WandIcon className="h-5 w-5 mr-2" />
                     AI 助手
                 </h4>
                 <button 
-                    onClick={onClose} 
-                    className="w-8 h-8 flex items-center justify-center rounded-full text-slate-500 hover:bg-slate-300/70 dark:hover:bg-slate-700/70 cursor-pointer"
+                    onClick={handleClose} 
+                    className="w-8 h-8 flex items-center justify-center rounded-full text-slate-500 hover:bg-slate-300/70 dark:hover:bg-slate-700/70 cursor-pointer btn-material"
                 >
                     <XIcon className="h-5 w-5" />
                 </button>
@@ -147,22 +163,34 @@ const AIAssistant: React.FC<AIAssistantProps> = ({ isOpen, onClose, onSubmit, is
                 <button 
                     onClick={handleSubmit}
                     disabled={!inputValue.trim() || isProcessing || isAwaitingConfirmation}
-                    className="absolute bottom-3 right-3 w-9 h-9 flex items-center justify-center bg-blue-600 text-white rounded-full hover:bg-blue-500 disabled:bg-slate-400 dark:disabled:bg-slate-600 transition-colors"
+                    className="absolute bottom-3 right-3 w-9 h-9 flex items-center justify-center bg-monet-dark text-white rounded-full hover:bg-monet-dark-hover disabled:bg-slate-400 dark:disabled:bg-slate-600 transition-colors btn-material"
                 >
                     <SendIcon className="h-5 w-5" />
                 </button>
             </div>
              {(isProcessing || message) && (
-                <div className="mt-2 text-xs text-slate-600 dark:text-slate-400 px-2 animate-scale-in">
-                    {message}
-                </div>
+                 <div className="mt-3 text-xs text-slate-600 dark:text-slate-400 px-2 animate-scale-in" style={{ animationDuration: '150ms' }}>
+                     {isProcessing ? (
+                         <div className="space-y-1.5">
+                             {message && <p>{message}</p>}
+                             <div className="w-full bg-slate-300/70 rounded-full h-1.5 dark:bg-slate-700/70">
+                                 <div
+                                     className="bg-blue-500 h-1.5 rounded-full"
+                                     style={{ width: `${progress}%`, transition: 'width 0.3s ease-in-out' }}
+                                 ></div>
+                             </div>
+                         </div>
+                     ) : (
+                         message && <p>{message}</p>
+                     )}
+                 </div>
             )}
             {isAwaitingConfirmation && (
                  <div className="mt-3 flex items-center justify-end space-x-3 animate-scale-in" style={{animationDuration: '150ms'}}>
-                    <button onClick={onRevert} className="px-5 py-2 text-sm font-semibold text-slate-700 dark:text-slate-200 bg-slate-300/70 dark:bg-slate-700/70 rounded-full hover:bg-slate-400/70 dark:hover:bg-slate-600/70 transition-colors">
+                    <button onClick={onRevert} className="px-5 py-2 text-sm font-semibold text-slate-700 dark:text-slate-200 bg-slate-300/70 dark:bg-slate-700/70 rounded-full hover:bg-slate-400/70 dark:hover:bg-slate-600/70 transition-colors btn-material">
                         回退
                     </button>
-                    <button onClick={onAccept} className="px-5 py-2 text-sm font-semibold text-white bg-blue-600 rounded-full hover:bg-blue-500 transition-colors">
+                    <button onClick={onAccept} className="px-5 py-2 text-sm font-semibold text-white bg-monet-dark rounded-full hover:bg-monet-dark-hover transition-colors btn-material">
                         接受
                     </button>
                 </div>

@@ -1,5 +1,3 @@
-
-
 import React, { useState, useRef, useEffect } from 'react';
 import { STORY_PLOTS, PLOT_CATEGORIES, STORY_STYLES, STYLE_CATEGORIES, STORY_STRUCTURES, STRUCTURE_CATEGORIES } from '../constants';
 import { PLOT_DESCRIPTIONS } from '../plotDescriptions';
@@ -12,6 +10,8 @@ interface SidebarProps {
   onClose: () => void;
   dragOffset: number | null;
   sidebarRef: React.RefObject<HTMLDivElement>;
+  isMobile?: boolean;
+  isPageView?: boolean;
 }
 
 const PlotAccordionItem: React.FC<{ category: PlotCategory, plots: Plot[], onAddNode: (type: NodeType, data?: any) => void; }> = ({ category, plots, onAddNode }) => {
@@ -24,7 +24,7 @@ const PlotAccordionItem: React.FC<{ category: PlotCategory, plots: Plot[], onAdd
 
     return (
         <div>
-            <button onClick={() => setIsOpen(!isOpen)} className="w-full flex justify-between items-center p-4 text-left hover:bg-slate-200 dark:hover:bg-slate-800/50 transition-colors duration-200">
+            <button onClick={() => setIsOpen(!isOpen)} className="w-full flex justify-between items-center p-4 text-left hover:bg-slate-200 dark:hover:bg-slate-800/50 transition-colors duration-200 btn-material rounded-2xl">
                 <span className="font-semibold text-lg">{category}</span>
                 <ChevronDownIcon className={`h-5 w-5 transform transition-transform duration-300 ease-out ${isOpen ? 'rotate-180' : ''}`} />
             </button>
@@ -39,7 +39,7 @@ const PlotAccordionItem: React.FC<{ category: PlotCategory, plots: Plot[], onAdd
                                 >
                                     {plot.name}
                                 </span>
-                                <button onClick={() => handleAddPlot(plot)} className="w-8 h-8 flex-shrink-0 flex items-center justify-center ml-2 rounded-full text-slate-600 dark:text-slate-300 hover:bg-blue-300 dark:hover:bg-blue-800 hover:text-slate-900 dark:hover:text-slate-100 transition-colors">
+                                <button onClick={() => handleAddPlot(plot)} className="w-8 h-8 flex-shrink-0 flex items-center justify-center ml-2 rounded-full text-slate-600 dark:text-slate-300 hover:bg-blue-300 dark:hover:bg-blue-800 hover:text-slate-900 dark:hover:text-slate-100 transition-colors btn-material">
                                     <PlusIcon className="h-5 w-5" />
                                 </button>
                             </div>
@@ -66,7 +66,7 @@ const StyleAccordionItem: React.FC<{ category: StyleCategory, styles: Style[], o
 
     return (
         <div>
-            <button onClick={() => setIsOpen(!isOpen)} className="w-full flex justify-between items-center p-4 text-left hover:bg-slate-200 dark:hover:bg-slate-800/50 transition-colors duration-200">
+            <button onClick={() => setIsOpen(!isOpen)} className="w-full flex justify-between items-center p-4 text-left hover:bg-slate-200 dark:hover:bg-slate-800/50 transition-colors duration-200 btn-material rounded-2xl">
                 <span className="font-semibold text-lg">{category}</span>
                 <ChevronDownIcon className={`h-5 w-5 transform transition-transform duration-300 ease-out ${isOpen ? 'rotate-180' : ''}`} />
             </button>
@@ -81,7 +81,7 @@ const StyleAccordionItem: React.FC<{ category: StyleCategory, styles: Style[], o
                                 >
                                     {style.name}
                                 </span>
-                                <button onClick={() => handleAddStyle(style)} className="w-8 h-8 flex-shrink-0 flex items-center justify-center ml-2 rounded-full text-slate-600 dark:text-slate-300 hover:bg-pink-300 dark:hover:bg-pink-800 hover:text-slate-900 dark:hover:text-slate-100 transition-colors">
+                                <button onClick={() => handleAddStyle(style)} className="w-8 h-8 flex-shrink-0 flex items-center justify-center ml-2 rounded-full text-slate-600 dark:text-slate-300 hover:bg-pink-300 dark:hover:bg-pink-800 hover:text-slate-900 dark:hover:text-slate-100 transition-colors btn-material">
                                     <PlusIcon className="h-5 w-5" />
                                 </button>
                             </div>
@@ -108,7 +108,7 @@ const StructureAccordionItem: React.FC<{ category: StructureCategory, structures
 
     return (
         <div>
-            <button onClick={() => setIsOpen(!isOpen)} className="w-full flex justify-between items-center p-4 text-left hover:bg-slate-200 dark:hover:bg-slate-800/50 transition-colors duration-200">
+            <button onClick={() => setIsOpen(!isOpen)} className="w-full flex justify-between items-center p-4 text-left hover:bg-slate-200 dark:hover:bg-slate-800/50 transition-colors duration-200 btn-material rounded-2xl">
                 <span className="font-semibold text-lg">{category}</span>
                 <ChevronDownIcon className={`h-5 w-5 transform transition-transform duration-300 ease-out ${isOpen ? 'rotate-180' : ''}`} />
             </button>
@@ -123,7 +123,7 @@ const StructureAccordionItem: React.FC<{ category: StructureCategory, structures
                                 >
                                     {structure.name}
                                 </span>
-                                <button onClick={() => handleAddStructure(structure)} className="w-8 h-8 flex-shrink-0 flex items-center justify-center ml-2 rounded-full text-slate-600 dark:text-slate-300 hover:bg-amber-300 dark:hover:bg-amber-800 hover:text-slate-900 dark:hover:text-slate-100 transition-colors">
+                                <button onClick={() => handleAddStructure(structure)} className="w-8 h-8 flex-shrink-0 flex items-center justify-center ml-2 rounded-full text-slate-600 dark:text-slate-300 hover:bg-amber-300 dark:hover:bg-amber-800 hover:text-slate-900 dark:hover:text-slate-100 transition-colors btn-material">
                                     <PlusIcon className="h-5 w-5" />
                                 </button>
                             </div>
@@ -141,7 +141,7 @@ const StructureAccordionItem: React.FC<{ category: StructureCategory, structures
 };
 
 
-const Sidebar: React.FC<SidebarProps> = ({ onAddNode, isOpen, onClose, dragOffset, sidebarRef }) => {
+const Sidebar: React.FC<SidebarProps> = ({ onAddNode, isOpen, onClose, dragOffset, sidebarRef, isMobile = false, isPageView = false }) => {
   const [customPlot, setCustomPlot] = useState('');
   const [customStyle, setCustomStyle] = useState('');
   
@@ -192,41 +192,53 @@ const Sidebar: React.FC<SidebarProps> = ({ onAddNode, isOpen, onClose, dragOffse
   };
   
   const isDragging = dragOffset !== null;
+  
   const transitionClass = isDragging ? '' : 'transition-transform duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]';
   const openClosedClass = isOpen ? 'translate-x-0' : '-translate-x-full';
-    
-  // FIX: Added definition for `transformStyle` to dynamically apply styles during sidebar drag gestures.
+  
+  const mobileOverlayClasses = `fixed top-0 left-0 h-full w-80 bg-slate-200 dark:bg-slate-900 shadow-2xl z-30 flex flex-col p-5 border-r border-slate-300 dark:border-slate-800 transform ${transitionClass} ${openClosedClass}`;
+  const mobilePageClasses = 'w-full h-full flex flex-col p-5 bg-slate-100 dark:bg-slate-950';
+  const desktopClasses = 'relative w-80 h-full bg-slate-200 dark:bg-slate-900 shadow-xl z-20 flex flex-col p-5 border-r border-slate-300 dark:border-slate-800';
+
+  let rootClassName = desktopClasses;
+  if (isMobile) {
+      rootClassName = isPageView ? mobilePageClasses : mobileOverlayClasses;
+  }
+
   const transformStyle = isDragging ? { transform: `translateX(${dragOffset}px)` } : undefined;
 
   return (
     <div 
       ref={sidebarRef}
-      className={`fixed top-0 left-0 h-full w-80 bg-slate-200 dark:bg-slate-900 shadow-2xl z-30 flex flex-col p-5 border-r border-slate-300 dark:border-slate-800 transform md:relative md:z-20 md:translate-x-0 ${transitionClass} ${openClosedClass}`}
+      className={rootClassName}
       style={transformStyle}
     >
-      <button
-          onClick={onClose}
-          className="md:hidden absolute top-6 right-5 z-50 p-2 rounded-full bg-slate-300/50 dark:bg-slate-800/50 hover:bg-slate-400/50 dark:hover:bg-slate-700/50 text-slate-800 dark:text-slate-200 transition-colors"
-          aria-label="Close sidebar"
-      >
-          <XIcon className="h-6 w-6" />
-      </button>
+      {!isPageView && (
+        <button
+            onClick={onClose}
+            className="md:hidden absolute top-6 right-5 z-50 p-2 rounded-full bg-slate-300/50 dark:bg-slate-800/50 hover:bg-slate-400/50 dark:hover:bg-slate-700/50 text-slate-800 dark:text-slate-200 transition-colors btn-material"
+            aria-label="Close sidebar"
+        >
+            <XIcon className="h-6 w-6" />
+        </button>
+      )}
+
       <h1 className="text-4xl font-bold mb-6 text-blue-600 dark:text-blue-400">节点库</h1>
       
       <div className="grid grid-cols-2 gap-3 mb-6">
-        <button onClick={() => onAddNode(NodeType.WORK)} className="w-full flex items-center justify-center p-3 rounded-full bg-emerald-200 dark:bg-emerald-900/80 text-emerald-800 dark:text-emerald-200 hover:bg-emerald-300 dark:hover:bg-emerald-800 transition-all duration-300 font-semibold text-sm shadow-lg hover:shadow-xl hover:-translate-y-0.5 transform">
+        <button onClick={() => onAddNode(NodeType.WORK)} className="w-full flex items-center justify-center p-3 rounded-full bg-emerald-200 dark:bg-emerald-900/80 text-emerald-800 dark:text-emerald-200 hover:bg-emerald-300 dark:hover:bg-emerald-800 transition-all duration-300 font-semibold text-sm shadow-lg hover:shadow-xl hover:-translate-y-0.5 transform btn-material">
           <BookOpenIcon className="h-5 w-5 mr-2"/>
           添加作品
         </button>
-        <button onClick={() => onAddNode(NodeType.CHARACTER)} className="w-full flex items-center justify-center p-3 rounded-full bg-indigo-200 dark:bg-indigo-900/80 text-indigo-800 dark:text-indigo-200 hover:bg-indigo-300 dark:hover:bg-indigo-800 transition-all duration-300 font-semibold text-sm shadow-lg hover:shadow-xl hover:-translate-y-0.5 transform">
+        <button onClick={() => onAddNode(NodeType.CHARACTER)} className="w-full flex items-center justify-center p-3 rounded-full bg-indigo-200 dark:bg-indigo-900/80 text-indigo-800 dark:text-indigo-200 hover:bg-indigo-300 dark:hover:bg-indigo-800 transition-all duration-300 font-semibold text-sm shadow-lg hover:shadow-xl hover:-translate-y-0.5 transform btn-material">
           <PersonIcon className="h-5 w-5 mr-2"/>
           添加人物
         </button>
-        <button onClick={() => onAddNode(NodeType.SETTING)} className="w-full flex items-center justify-center p-3 rounded-full bg-purple-200 dark:bg-purple-900/80 text-purple-800 dark:text-purple-200 hover:bg-purple-300 dark:hover:bg-purple-800 transition-all duration-300 font-semibold text-sm shadow-lg hover:shadow-xl hover:-translate-y-0.5 transform">
+        <button onClick={() => onAddNode(NodeType.SETTING)} className="w-full flex items-center justify-center p-3 rounded-full bg-purple-200 dark:bg-purple-900/80 text-purple-800 dark:text-purple-200 hover:bg-purple-300 dark:hover:bg-purple-800 transition-all duration-300 font-semibold text-sm shadow-lg hover:shadow-xl hover:-translate-y-0.5 transform btn-material">
           <SettingIcon className="h-5 w-5 mr-2"/>
           添加设定
         </button>
-        <button onClick={() => onAddNode(NodeType.ENVIRONMENT)} className="w-full flex items-center justify-center p-3 rounded-full bg-green-200 dark:bg-green-900/80 text-green-800 dark:text-green-200 hover:bg-green-300 dark:hover:bg-green-800 transition-all duration-300 font-semibold text-sm shadow-lg hover:shadow-xl hover:-translate-y-0.5 transform">
+        <button onClick={() => onAddNode(NodeType.ENVIRONMENT)} className="w-full flex items-center justify-center p-3 rounded-full bg-green-200 dark:bg-green-900/80 text-green-800 dark:text-green-200 hover:bg-green-300 dark:hover:bg-green-800 transition-all duration-300 font-semibold text-sm shadow-lg hover:shadow-xl hover:-translate-y-0.5 transform btn-material">
           <EnvironmentIcon className="h-5 w-5 mr-2"/>
           添加环境
         </button>
@@ -242,7 +254,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onAddNode, isOpen, onClose, dragOffse
                 key={filter.id}
                 ref={el => { tabsRef.current[index] = el; }}
                 onClick={() => setActiveFilter(filter.id)} 
-                className={`relative z-10 w-full text-center px-3 py-2 rounded-full transition-colors duration-300 font-medium text-sm focus:outline-none ${
+                className={`relative z-10 w-full text-center px-3 py-2 rounded-full transition-colors duration-300 font-medium text-sm focus:outline-none btn-material ${
                     activeFilter === filter.id 
                     ? 'text-white' 
                     : 'text-slate-700 dark:text-slate-300 hover:bg-slate-400/20 dark:hover:bg-slate-700/50'
@@ -286,7 +298,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onAddNode, isOpen, onClose, dragOffse
                         placeholder="自定义情节..."
                         className="w-full bg-slate-200 dark:bg-slate-700/50 text-sm p-3 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
                     />
-                    <button onClick={handleAddCustomPlot} className="p-3 w-12 h-12 flex items-center justify-center flex-shrink-0 rounded-full bg-blue-500 hover:bg-blue-600 transition-colors text-white">
+                    <button onClick={handleAddCustomPlot} className="p-3 w-12 h-12 flex items-center justify-center flex-shrink-0 rounded-full bg-blue-500 hover:bg-blue-600 transition-colors text-white btn-material">
                         <PlusIcon className="h-6 w-6"/>
                     </button>
                  </div>
@@ -317,7 +329,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onAddNode, isOpen, onClose, dragOffse
                         placeholder="自定义风格..."
                         className="w-full bg-slate-200 dark:bg-slate-700/50 text-sm p-3 rounded-full focus:outline-none focus:ring-2 focus:ring-pink-500 transition-colors"
                     />
-                    <button onClick={handleAddCustomStyle} className="p-3 w-12 h-12 flex items-center justify-center flex-shrink-0 rounded-full bg-pink-500 hover:bg-pink-600 transition-colors text-white">
+                    <button onClick={handleAddCustomStyle} className="p-3 w-12 h-12 flex items-center justify-center flex-shrink-0 rounded-full bg-pink-500 hover:bg-pink-600 transition-colors text-white btn-material">
                         <PlusIcon className="h-6 w-6"/>
                     </button>
                  </div>

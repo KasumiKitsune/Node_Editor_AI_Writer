@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import Modal from './Modal';
 import MarkdownRenderer from './MarkdownRenderer';
-import { MANUAL_CONTENT, GENERAL_EXAMPLE_CONTENT, EXPANSION_EXAMPLE_CONTENT, REWRITE_EXAMPLE_CONTENT } from '../helpContent';
+import { MANUAL_CONTENT, GENERAL_EXAMPLE_CONTENT, EXPANSION_EXAMPLE_CONTENT, REWRITE_EXAMPLE_CONTENT, ASSISTANT_EXAMPLE_CONTENT, CONTINUATION_EXAMPLE_CONTENT, PARODY_EXAMPLE_CONTENT } from '../helpContent';
 import { UploadIcon } from './icons';
 
-export type ExampleName = 'general' | 'expand' | 'rewrite';
+export type ExampleName = 'general' | 'expand' | 'rewrite' | 'assistant' | 'continuation' | 'parody';
 
 interface HelpModalProps {
   isOpen: boolean;
@@ -19,9 +19,12 @@ const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose, onLoadExample })
 
   const tabs: { id: Tab; label: string; content: string }[] = [
     { id: 'manual', label: '使用说明', content: MANUAL_CONTENT },
-    { id: 'general', label: '通用示例', content: GENERAL_EXAMPLE_CONTENT },
-    { id: 'expand', label: 'AI 扩展示例', content: EXPANSION_EXAMPLE_CONTENT },
-    { id: 'rewrite', label: '改写作品示例', content: REWRITE_EXAMPLE_CONTENT },
+    { id: 'general', label: '一般用途示例', content: GENERAL_EXAMPLE_CONTENT },
+    { id: 'expand', label: '概念扩展', content: EXPANSION_EXAMPLE_CONTENT },
+    { id: 'rewrite', label: '重塑故事', content: REWRITE_EXAMPLE_CONTENT },
+    { id: 'assistant', label: 'AI助手交互', content: ASSISTANT_EXAMPLE_CONTENT },
+    { id: 'continuation', label: '文本续写', content: CONTINUATION_EXAMPLE_CONTENT },
+    { id: 'parody', label: '风格仿写', content: PARODY_EXAMPLE_CONTENT },
   ];
   
   const activeTabData = tabs.find(tab => tab.id === activeTab);
@@ -30,13 +33,13 @@ const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose, onLoadExample })
 
   const mobileFooter = (
     <div className="flex items-center gap-3">
-        <button onClick={onClose} className="flex-1 px-6 py-3 bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-white font-semibold rounded-full hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors">
+        <button onClick={onClose} className="flex-1 px-6 py-3 bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-white font-semibold rounded-full hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors btn-material">
             返回
         </button>
         {activeTab !== 'manual' && (
             <button
                 onClick={() => onLoadExample(activeTab as ExampleName)}
-                className="flex-1 inline-flex items-center justify-center px-6 py-3 bg-emerald-600 text-white font-semibold rounded-full hover:bg-emerald-500 transition-colors shadow-lg"
+                className="flex-1 inline-flex items-center justify-center px-6 py-3 bg-emerald-600 text-white font-semibold rounded-full hover:bg-emerald-500 transition-colors shadow-lg btn-material"
             >
                 <UploadIcon className="h-5 w-5 mr-2" />
                 加载示例
@@ -55,10 +58,10 @@ const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose, onLoadExample })
               <li key={tab.id} className="flex-shrink-0">
                 <button
                   onClick={() => setActiveTab(tab.id)}
-                  className={`w-full text-left px-4 py-3 rounded-full text-sm font-medium transition-all duration-300 ${
+                  className={`w-full text-left px-4 py-3 rounded-full text-sm font-medium transition-all duration-300 btn-material ${
                     activeTab === tab.id
-                      ? 'bg-blue-600 text-white shadow-md'
-                      : 'text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800'
+                      ? 'bg-monet-dark text-white shadow-md'
+                      : 'text-slate-700 dark:text-slate-300 hover:bg-monet-medium dark:hover:bg-slate-800'
                   }`}
                 >
                   {tab.label}
@@ -67,14 +70,14 @@ const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose, onLoadExample })
             ))}
           </ul>
         </div>
-        <div className="md:flex-grow bg-slate-50/50 dark:bg-slate-900/50 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 flex flex-col min-h-0">
+        <div className="md:flex-grow bg-monet-medium/30 dark:bg-slate-900/50 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 flex flex-col min-h-0">
             <div className="flex-grow overflow-y-auto">
                 {activeTabData && <MarkdownRenderer content={activeTabData.content} />}
                 {activeTab !== 'manual' && (
                     <div className="hidden md:block mt-8 text-center">
                         <button
                             onClick={() => onLoadExample(activeTab as ExampleName)}
-                            className="inline-flex items-center justify-center px-6 py-3 bg-emerald-600 text-white font-semibold rounded-full hover:bg-emerald-500 transition-colors shadow-lg hover:shadow-emerald-500/30"
+                            className="inline-flex items-center justify-center px-6 py-3 bg-emerald-600 text-white font-semibold rounded-full hover:bg-emerald-500 transition-colors shadow-lg hover:shadow-emerald-500/30 btn-material"
                         >
                             <UploadIcon className="h-5 w-5 mr-2" />
                             加载此示例到画布

@@ -103,7 +103,7 @@ const DownloadDropdown: React.FC<DownloadDropdownProps> = ({ assetType, onSelect
         <div className="relative" ref={dropdownRef}>
             <button
                 onClick={() => setIsOpen(!isOpen)}
-                className="w-10 h-10 flex items-center justify-center rounded-full bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-slate-100 transition-colors"
+                className="w-10 h-10 flex items-center justify-center rounded-full bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-slate-100 transition-colors btn-material"
                 title="下载"
             >
                 <DownloadIcon className="h-5 w-5" />
@@ -115,7 +115,7 @@ const DownloadDropdown: React.FC<DownloadDropdownProps> = ({ assetType, onSelect
                             <li
                                 key={option.format}
                                 onClick={() => { onSelectFormat(option.format); setIsOpen(false); }}
-                                className="px-3 py-2 text-sm rounded-xl cursor-pointer text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                                className="px-3 py-2 text-sm rounded-xl cursor-pointer text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors btn-material"
                             >
                                 {option.label}
                             </li>
@@ -243,7 +243,7 @@ const ResultModals: React.FC<ResultModalsProps> = ({
 
     const modalHeaderActions = (
         <div className="flex items-center space-x-2">
-            <button onClick={() => onCopy(modalContent === 'outline' ? JSON.stringify(outline, null, 2) : story)} className="w-10 h-10 flex items-center justify-center rounded-full bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-slate-100 transition-colors" title="复制"><CopyIcon className="h-5 w-5"/></button>
+            <button onClick={() => onCopy(modalContent === 'outline' ? JSON.stringify(outline, null, 2) : story)} className="w-10 h-10 flex items-center justify-center rounded-full bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-slate-100 transition-colors btn-material" title="复制"><CopyIcon className="h-5 w-5"/></button>
             <DownloadDropdown assetType={modalContent!} onSelectFormat={(format) => onDownload(modalContent!, format as any)} />
         </div>
     );
@@ -253,9 +253,9 @@ const ResultModals: React.FC<ResultModalsProps> = ({
             <div className="flex flex-col gap-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                     <div className="flex items-center space-x-1">
-                        <button onClick={onUndo} disabled={!canUndo || isRevising} className="p-3 bg-slate-200 dark:bg-slate-800 rounded-full disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors" title="撤销"><UndoIcon className="h-5 w-5"/></button>
-                        <button onClick={onRedo} disabled={!canRedo || isRevising} className="p-3 bg-slate-200 dark:bg-slate-800 rounded-full disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors" title="重做"><RedoIcon className="h-5 w-5"/></button>
-                        <button onClick={() => setViewMode(v => v === 'diff' ? 'read' : 'diff')} disabled={!hasPreviousVersion} className="p-3 bg-slate-200 dark:bg-slate-800 rounded-full disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors" title={viewMode === 'diff' ? '阅读视图' : '对比视图'}>
+                        <button onClick={onUndo} disabled={!canUndo || isRevising} className="p-3 bg-slate-200 dark:bg-slate-800 rounded-full disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors btn-material" title="撤销"><UndoIcon className="h-5 w-5"/></button>
+                        <button onClick={onRedo} disabled={!canRedo || isRevising} className="p-3 bg-slate-200 dark:bg-slate-800 rounded-full disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors btn-material" title="重做"><RedoIcon className="h-5 w-5"/></button>
+                        <button onClick={() => setViewMode(v => v === 'diff' ? 'read' : 'diff')} disabled={!hasPreviousVersion} className="p-3 bg-slate-200 dark:bg-slate-800 rounded-full disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors btn-material" title={viewMode === 'diff' ? '阅读视图' : '对比视图'}>
                             {viewMode === 'diff' ? <EyeIcon className="h-5 w-5"/> : <CompareIcon className="h-5 w-5"/>}
                         </button>
                     </div>
@@ -264,7 +264,7 @@ const ResultModals: React.FC<ResultModalsProps> = ({
                         <button 
                             onClick={onGenerateStory}
                             disabled={isAnyTaskRunning || !outline}
-                            className="px-6 h-12 bg-emerald-600 text-white font-bold rounded-full hover:bg-emerald-500 transition-colors disabled:bg-slate-500 dark:disabled:bg-slate-700 disabled:text-slate-100 dark:disabled:text-slate-400 disabled:cursor-not-allowed shadow-lg shadow-emerald-500/20 hover:shadow-emerald-500/40"
+                            className="px-6 h-12 bg-emerald-600 text-white font-bold rounded-full hover:bg-emerald-500 transition-colors disabled:bg-slate-500 dark:disabled:bg-slate-700 disabled:text-slate-100 dark:disabled:text-slate-400 disabled:cursor-not-allowed shadow-lg shadow-emerald-500/20 hover:shadow-emerald-500/40 btn-material"
                         >
                             {activeProgressTask === 'story' ? '生成中...' : '开始创作'}
                         </button>
@@ -287,7 +287,7 @@ const ResultModals: React.FC<ResultModalsProps> = ({
                         <button
                             onClick={onRevise}
                             disabled={isRevising || !revisionPrompt.trim()}
-                            className={`h-11 bg-purple-600 text-white font-semibold rounded-full hover:bg-purple-500 transition-all duration-200 disabled:bg-slate-500 dark:disabled:bg-slate-600 flex items-center justify-center flex-shrink-0 transform disabled:scale-100 ${
+                            className={`h-11 bg-purple-600 text-white font-semibold rounded-full hover:bg-purple-500 transition-all duration-200 disabled:bg-slate-500 dark:disabled:bg-slate-600 flex items-center justify-center flex-shrink-0 transform disabled:scale-100 btn-material ${
                                 isRevising ? 'w-11' : 'px-6 hover:scale-105'
                             }`}
                             aria-label="发送修改"
@@ -318,7 +318,7 @@ const ResultModals: React.FC<ResultModalsProps> = ({
 
                                 return (
                                 <div key={index} className={`p-4 bg-white dark:bg-slate-800/60 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700/50 ${showDiff && isNewSegment ? 'border-green-500/50' : ''}`}>
-                                    <h3 className={`text-xl font-bold text-blue-600 dark:text-blue-400 mb-3 border-b border-blue-500/20 pb-2 ${getHighlightClass(titleChanged)}`}>
+                                    <h3 className={`text-xl font-bold text-monet-dark dark:text-blue-400 mb-3 border-b border-blue-500/20 pb-2 ${getHighlightClass(titleChanged)}`}>
                                         {segment.chapters ? `第 ${index + 1} 部分: ` : ''}{segment.segment_title}
                                         <span className={`text-sm font-normal text-slate-500 dark:text-slate-400 ml-3 ${getHighlightClass(wordCountChanged)}`}>(预计 {segment.estimated_word_count} 字)</span>
                                     </h3>
@@ -371,13 +371,13 @@ const ResultModals: React.FC<ResultModalsProps> = ({
                     <div className="flex flex-grow overflow-hidden gap-6 min-h-0">
                         {storyHeadings.length > 0 && (
                             <nav className="w-64 flex-shrink-0 pr-4 overflow-y-auto hidden md:block">
-                                <p className="text-xl font-bold mb-4 text-blue-600 dark:text-blue-400">目录</p>
+                                <p className="text-xl font-bold mb-4 text-monet-dark dark:text-blue-400">目录</p>
                                 <ul className="space-y-1">
                                     {storyHeadings.map(h => (
                                         <li key={h.id} style={{ paddingLeft: `${(h.level - 1) * 1}rem`}}>
                                             <button 
                                                 onClick={() => onTocClick(h.id)}
-                                                className="text-left text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-800 rounded-md p-2 transition-colors text-sm w-full truncate"
+                                                className="text-left text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-800 rounded-md p-2 transition-colors text-sm w-full truncate btn-material"
                                                 title={h.text}
                                             >
                                                 {h.text}

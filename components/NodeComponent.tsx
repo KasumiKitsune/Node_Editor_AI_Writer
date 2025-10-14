@@ -223,13 +223,13 @@ const EditableNode: React.FC<{
                         draggable="false"
                         className="bg-slate-200 dark:bg-slate-700/50 text-sm p-2.5 rounded-xl w-2/3 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
                         />
-                        <button onClick={() => removeField(field.id)} className="text-slate-400 dark:text-slate-500 hover:text-red-500 dark:hover:text-red-400 transition-colors flex-shrink-0">
+                        <button onClick={() => removeField(field.id)} className="text-slate-400 dark:text-slate-500 hover:text-red-500 dark:hover:text-red-400 transition-colors flex-shrink-0 btn-material rounded-full p-1">
                           <TrashIcon className="h-5 w-5" />
                         </button>
                     </div>
                     ))}
                     <div className="flex items-center space-x-3 pt-2">
-                        <button onClick={addField} className="w-full h-11 flex items-center justify-center text-sm p-2 rounded-full bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors font-semibold">
+                        <button onClick={addField} className="w-full h-11 flex items-center justify-center text-sm p-2 rounded-full bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors font-semibold btn-material">
                             <PlusIcon className="h-5 w-5 mr-1" />
                             添加项目
                         </button>
@@ -237,7 +237,7 @@ const EditableNode: React.FC<{
                             <button 
                                 onClick={onExpand}
                                 disabled={isAnyTaskRunning}
-                                className="w-full h-11 flex items-center justify-center text-sm p-2 rounded-full bg-purple-600 hover:bg-purple-500 text-white transition-colors disabled:bg-slate-500 disabled:cursor-not-allowed font-semibold"
+                                className="w-full h-11 flex items-center justify-center text-sm p-2 rounded-full bg-purple-600 hover:bg-purple-500 text-white transition-colors disabled:bg-slate-500 disabled:cursor-not-allowed font-semibold btn-material"
                             >
                                 {isExpandingThisNode ? (
                                     <ProgressDisplay progress={progress} />
@@ -326,7 +326,7 @@ const WorkNode: React.FC<{
                                 <button
                                     key={mode}
                                     onClick={() => handleDataChange('mode', mode)}
-                                    className={`w-full text-center text-sm px-2 py-2 rounded-full transition-all duration-300 font-semibold ${node.data.mode === mode ? 'bg-emerald-500 text-white shadow-md' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-300/70 dark:hover:bg-slate-700/70'}`}
+                                    className={`w-full text-center text-sm px-2 py-2 rounded-full transition-all duration-300 font-semibold btn-material ${node.data.mode === mode ? 'bg-emerald-500 text-white shadow-md' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-300/70 dark:hover:bg-slate-700/70'}`}
                                 >
                                     {mode === 'rewrite' ? '改写' : mode === 'continue' ? '续写' : '仿写'}
                                 </button>
@@ -341,7 +341,7 @@ const WorkNode: React.FC<{
                                          <button
                                             key={level}
                                             onClick={() => handleDataChange('parodyLevel', level)}
-                                            className={`w-full text-center text-xs px-2 py-2 rounded-full transition-all duration-300 font-semibold ${node.data.parodyLevel === level ? 'bg-emerald-500 text-white shadow-md' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-300/70 dark:hover:bg-slate-700/70'}`}
+                                            className={`w-full text-center text-xs px-2 py-2 rounded-full transition-all duration-300 font-semibold btn-material ${node.data.parodyLevel === level ? 'bg-emerald-500 text-white shadow-md' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-300/70 dark:hover:bg-slate-700/70'}`}
                                         >
                                             {level === 'reference' ? '参考' : level === 'imitation' ? '模仿' : '套作'}
                                         </button>
@@ -354,7 +354,7 @@ const WorkNode: React.FC<{
                             <button 
                                 onClick={onAnalyze} 
                                 disabled={isAnyTaskRunning || !node.data.content}
-                                className="w-full h-11 flex items-center justify-center text-sm p-2 mt-1 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white transition-colors disabled:bg-slate-500 disabled:cursor-not-allowed font-semibold"
+                                className="w-full h-11 flex items-center justify-center text-sm p-2 mt-1 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white transition-colors disabled:bg-slate-500 disabled:cursor-not-allowed font-semibold btn-material"
                             >
                                 {isAnalyzingThisNode ? <ProgressDisplay progress={progress} /> : 'AI 解析生成节点'}
                             </button>
@@ -499,14 +499,14 @@ const NodeComponent: React.FC<NodeComponentProps> = ({ node, onUpdateData, onDel
       data-node-id={node.id}
     >
       <div 
-        className={`bg-white/70 dark:bg-slate-800/70 backdrop-blur-md rounded-3xl shadow-lg border border-slate-200 dark:border-slate-700/80 relative hover:shadow-2xl ${isDeleting ? 'animate-scale-out' : ''} ${!isDragging ? 'transition-transform duration-700 ease-out' : ''} ${highlightedNodeId === node.id ? 'node-highlight' : ''}`}
+        className={`bg-white/70 dark:bg-slate-800/70 backdrop-blur-md rounded-3xl shadow-lg border border-slate-200 dark:border-slate-700/80 relative hover:shadow-2xl transition-shadow duration-200 ${isDeleting ? 'animate-scale-out' : ''} ${!isDragging ? 'transition-transform duration-700 ease-out' : ''} ${highlightedNodeId === node.id ? 'node-highlight' : ''}`}
       >
         <div className="node-content-wrapper relative">
-            <button onClick={handleDelete} className="absolute -top-2.5 -right-2.5 w-7 h-7 flex items-center justify-center bg-slate-300 dark:bg-slate-600 text-slate-700 dark:text-slate-200 rounded-full hover:bg-red-500 hover:text-white dark:hover:bg-red-500 z-10 transition-all duration-200 hover:scale-110">
+            <button onClick={handleDelete} className="absolute -top-2.5 -right-2.5 w-7 h-7 flex items-center justify-center bg-slate-300 dark:bg-slate-600 text-slate-700 dark:text-slate-200 rounded-full hover:bg-red-500 hover:text-white dark:hover:bg-red-500 z-10 transition-all duration-200 hover:scale-110 btn-material">
                 <XIcon className="h-4 w-4"/>
             </button>
             {renderNodeContent()}
-            <button onClick={() => onToggleNodeCollapse(node.id)} className="absolute -bottom-2.5 -right-2.5 w-7 h-7 flex items-center justify-center bg-slate-300 dark:bg-slate-600 text-slate-700 dark:text-slate-200 rounded-full hover:bg-slate-400 dark:hover:bg-slate-500 z-10 transition-all duration-200 hover:scale-110">
+            <button onClick={() => onToggleNodeCollapse(node.id)} className="absolute -bottom-2.5 -right-2.5 w-7 h-7 flex items-center justify-center bg-slate-300 dark:bg-slate-600 text-slate-700 dark:text-slate-200 rounded-full hover:bg-slate-400 dark:hover:bg-slate-500 z-10 transition-all duration-200 hover:scale-110 btn-material">
                 {node.isCollapsed ? <ChevronDownIcon className="h-4 w-4"/> : <ChevronUpIcon className="h-4 w-4" />}
             </button>
         </div>

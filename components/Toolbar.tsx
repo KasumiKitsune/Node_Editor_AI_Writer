@@ -24,7 +24,7 @@ const CoreButtons: React.FC<Pick<ToolbarProps, 'setTheme' | 'theme' | 'onImportN
     onLayoutNodes,
     layoutMode,
 }) => {
-    const buttonClasses = "w-12 h-12 flex items-center justify-center bg-slate-200/80 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300 rounded-full hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors";
+    const buttonClasses = "w-12 h-12 flex items-center justify-center bg-slate-200/80 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300 rounded-full hover:bg-slate-300 dark:hover:bg-slate-700 transition-all duration-150 btn-material";
     
     // The icon should represent the layout mode that WILL BE applied on the next click.
     // The `layoutMode` state toggles AFTER the layout is performed.
