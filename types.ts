@@ -135,7 +135,20 @@ export interface StorySegment {
   estimated_word_count: number;
 }
 
+export interface MainCharacterInfo {
+    name: string;
+    attributes: string[];
+}
+
+export interface WorkInfo {
+    target_word_count: string;
+    settings: string[];
+}
+
 export interface StructuredOutline {
   title: string;
   segments: StorySegment[];
+  synopsis?: string;
+  main_characters?: MainCharacterInfo[];
+  work_info?: WorkInfo;
 }

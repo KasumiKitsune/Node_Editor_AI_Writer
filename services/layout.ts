@@ -1,7 +1,7 @@
 // services/layout.ts
 // FIX: Added React import for React.RefObject type.
 import React from 'react';
-import { Node, Edge, NodeType } from '../types';
+import { Node, Edge, NodeType, StructureCategory, StructureNodeData } from '../types';
 
 interface NodeDimensions {
     width: number;
@@ -84,73 +84,113 @@ const zoomToFit = (
     return { x: newX, y: newY, scale: newScale };
 };
 
-const placeSatelliteNodes = (
+const placeHierarchicalSatellites = (
     satelliteNodes: Node[],
+    flowNodes: Node[],
     edges: Edge[],
     positions: NodePositions,
-    dimensions: Map<string, NodeDimensions>,
-    fallbackStartPosition: { x: number; y: number }
+    dimensions: Map<string, NodeDimensions>
 ) => {
-    const targetAttachments: { [key: string]: Node[] } = {};
-    const unattachedNodes: Node[] = [];
     const verticalPadding = 20;
+    const horizontalPadding = 60;
+    const flowNodeIds = new Set(flowNodes.map(n => n.id));
 
-    // Group satellite nodes by target or as unattached
+    const attachments = new Map<string, { above: Node[], below: Node[], left: Node[] }>();
+    flowNodeIds.forEach(id => attachments.set(id, { above: [], below: [], left: [] }));
+
+    const unattachedSatellites: Node[] = [];
+
     satelliteNodes.forEach(sNode => {
-        const styleEdge = edges.find(e => e.source === sNode.id);
-        const targetNodeId = styleEdge?.target;
-        if (targetNodeId && positions.has(targetNodeId)) {
-            if (!targetAttachments[targetNodeId]) {
-                targetAttachments[targetNodeId] = [];
+        const connectedFlowEdges = edges.filter(e =>
+            (e.source === sNode.id && flowNodeIds.has(e.target)) ||
+            (e.target === sNode.id && flowNodeIds.has(e.source))
+        );
+
+        if (connectedFlowEdges.length > 0) {
+            const anchorEdge = connectedFlowEdges[0];
+            const anchorId = anchorEdge.source === sNode.id ? anchorEdge.target : anchorEdge.source;
+            
+            if (sNode.type === NodeType.STYLE) {
+                attachments.get(anchorId)!.left.push(sNode);
+            } else {
+                const aboveCount = attachments.get(anchorId)!.above.length;
+                const belowCount = attachments.get(anchorId)!.below.length;
+                if (aboveCount <= belowCount) {
+                    attachments.get(anchorId)!.above.push(sNode);
+                } else {
+                    attachments.get(anchorId)!.below.push(sNode);
+                }
             }
-            targetAttachments[targetNodeId].push(sNode);
         } else {
-            unattachedNodes.push(sNode);
+            unattachedSatellites.push(sNode);
         }
     });
 
-    // Position attached nodes
-    for (const targetNodeId in targetAttachments) {
-        const attachedNodes = targetAttachments[targetNodeId];
-        const targetPos = positions.get(targetNodeId)!;
-        const targetDim = dimensions.get(targetNodeId)!;
-        
-        const totalHeight = attachedNodes.reduce((sum, node) => sum + dimensions.get(node.id)!.height, 0) + (attachedNodes.length - 1) * verticalPadding;
-        let startY = targetPos.y + (targetDim.height / 2) - (totalHeight / 2);
+    attachments.forEach((groups, anchorId) => {
+        const anchorPos = positions.get(anchorId)!;
+        const anchorDim = dimensions.get(anchorId)!;
 
-        attachedNodes.forEach(sNode => {
-            const sNodeDim = dimensions.get(sNode.id)!;
-            const x = targetPos.x - sNodeDim.width - 60;
-            positions.set(sNode.id, { x: x, y: startY });
-            startY += sNodeDim.height + verticalPadding;
+        let currentY = anchorPos.y - verticalPadding;
+        groups.above.reverse().forEach(node => {
+            const nodeDim = dimensions.get(node.id)!;
+            currentY -= nodeDim.height;
+            positions.set(node.id, { x: anchorPos.x + (anchorDim.width - nodeDim.width) / 2, y: currentY });
+            currentY -= verticalPadding;
+        });
+
+        currentY = anchorPos.y + anchorDim.height + verticalPadding;
+        groups.below.forEach(node => {
+            const nodeDim = dimensions.get(node.id)!;
+            positions.set(node.id, { x: anchorPos.x + (anchorDim.width - nodeDim.width) / 2, y: currentY });
+            currentY += nodeDim.height + verticalPadding;
+        });
+        
+        // --- MODIFIED ---
+        // Stack style nodes vertically to the left instead of horizontally
+        if (groups.left.length > 0) {
+            const maxWidth = Math.max(...groups.left.map(node => dimensions.get(node.id)!.width));
+            const startX = anchorPos.x - horizontalPadding - maxWidth;
+            
+            const totalHeight = groups.left.reduce((sum, node) => sum + dimensions.get(node.id)!.height + verticalPadding, 0) - verticalPadding;
+            let currentY = anchorPos.y + (anchorDim.height / 2) - (totalHeight / 2);
+
+            groups.left.forEach(node => {
+                const nodeDim = dimensions.get(node.id)!;
+                positions.set(node.id, { x: startX + (maxWidth - nodeDim.width) / 2, y: currentY });
+                currentY += nodeDim.height + verticalPadding;
+            });
+        }
+    });
+
+    if (unattachedSatellites.length > 0) {
+        let minX = Infinity;
+        positions.forEach(pos => { minX = Math.min(minX, pos.x); });
+        
+        let startX = (minX !== Infinity) ? minX - 400 : 50;
+        let currentY = 50;
+
+        unattachedSatellites.forEach(node => {
+            const nodeDim = dimensions.get(node.id)!;
+            positions.set(node.id, { x: startX, y: currentY });
+            currentY += nodeDim.height + verticalPadding;
         });
     }
-
-    // Position unattached nodes
-    let unattachedY = fallbackStartPosition.y;
-    unattachedNodes.forEach(sNode => {
-        const sNodeDim = dimensions.get(sNode.id)!;
-        positions.set(sNode.id, { x: fallbackStartPosition.x, y: unattachedY });
-        unattachedY += sNodeDim.height + verticalPadding;
-    });
 };
 
 const calculateHierarchicalLayout = (
     nodes: Node[],
     edges: Edge[],
-    dimensions: Map<string, NodeDimensions>,
-    editorWidth: number
+    dimensions: Map<string, NodeDimensions>
 ): NodePositions => {
     const positions = new Map<string, { x: number; y: number }>();
-    const flowNodeTypes: NodeType[] = [NodeType.PLOT, NodeType.STRUCTURE, NodeType.SETTING, NodeType.WORK, NodeType.CHARACTER, NodeType.ENVIRONMENT];
-    const satelliteNodeTypes: NodeType[] = [NodeType.STYLE];
+    const flowNodeTypes: NodeType[] = [NodeType.PLOT, NodeType.STRUCTURE, NodeType.SETTING, NodeType.WORK];
+    const satelliteNodeTypes: NodeType[] = [NodeType.STYLE, NodeType.CHARACTER, NodeType.ENVIRONMENT];
 
     const flowNodes = nodes.filter(n => flowNodeTypes.includes(n.type));
     const satelliteNodes = nodes.filter(n => satelliteNodeTypes.includes(n.type));
 
     if (flowNodes.length === 0) {
-        // If no flow nodes, just position satellites
-        placeSatelliteNodes(satelliteNodes, edges, positions, dimensions, { x: 50, y: 50 });
+        placeHierarchicalSatellites(satelliteNodes, flowNodes, edges, positions, dimensions);
         nodes.forEach(n => {
             if (!positions.has(n.id)) positions.set(n.id, n.position);
         });
@@ -163,12 +203,14 @@ const calculateHierarchicalLayout = (
     });
 
     edges.forEach(edge => {
-        if (nodeMap.has(edge.source) && nodeMap.has(edge.target)) {
+        const sourceNode = nodes.find(n => n.id === edge.source);
+        const targetNode = nodes.find(n => n.id === edge.target);
+        if (sourceNode && targetNode && flowNodeTypes.includes(sourceNode.type) && flowNodeTypes.includes(targetNode.type)) {
             nodeMap.get(edge.source)!.children.push(edge.target);
             nodeMap.get(edge.target)!.parents.push(edge.source);
         }
     });
-    
+
     const ranks = new Map<string, number>();
     const queue: string[] = [];
     nodeMap.forEach((data, id) => {
@@ -179,72 +221,55 @@ const calculateHierarchicalLayout = (
     });
 
     let head = 0;
-    while(head < queue.length) {
+    while (head < queue.length) {
         const uId = queue[head++];
         const uRank = ranks.get(uId)!;
-        
         nodeMap.get(uId)?.children.forEach(vId => {
-            const currentVRank = ranks.get(vId) || 0;
-            ranks.set(vId, Math.max(currentVRank, uRank + 1));
-            // Check if all parents of vId have been ranked
-            if(nodeMap.get(vId)?.parents.every(pId => ranks.has(pId))) {
-                if(!queue.includes(vId)) {
-                    queue.push(vId);
-                }
+            ranks.set(vId, Math.max(ranks.get(vId) || 0, uRank + 1));
+            // A simple cycle detection to prevent infinite loops.
+            if (!queue.slice(head).includes(vId)) {
+                 queue.push(vId);
             }
         });
     }
+    
+    flowNodes.forEach(node => {
+        if (!ranks.has(node.id)) {
+            ranks.set(node.id, 0);
+        }
+    });
 
     const layers = new Map<number, string[]>();
-    let maxRank = 0;
     ranks.forEach((rank, id) => {
         if (!layers.has(rank)) layers.set(rank, []);
         layers.get(rank)!.push(id);
-        maxRank = Math.max(maxRank, rank);
     });
 
     const xSpacing = 120;
-    const ySpacing = 100;
+    const ySpacing = 50;
     const nodePadding = 50;
-    const layoutWidth = editorWidth > 800 ? editorWidth * 0.9 : editorWidth * 1.5;
-
     let currentX = nodePadding;
-    let currentY = nodePadding;
-    let maxRowHeight = 0;
-    
-    const sortedRanks = Array.from(layers.keys()).sort((a,b) => a - b);
+
+    const sortedRanks = Array.from(layers.keys()).sort((a, b) => a - b);
 
     for (const rank of sortedRanks) {
         const layerNodeIds = layers.get(rank) || [];
         if (layerNodeIds.length === 0) continue;
 
-        let maxNodeWidthInLayer = 0;
-        let totalLayerHeight = 0;
-        layerNodeIds.forEach(id => {
-            const dim = dimensions.get(id)!;
-            maxNodeWidthInLayer = Math.max(maxNodeWidthInLayer, dim.width);
-            totalLayerHeight += dim.height;
-        });
-        totalLayerHeight += (layerNodeIds.length - 1) * ySpacing;
-
-        if (currentX + maxNodeWidthInLayer > layoutWidth && rank > 0) {
-            currentX = nodePadding;
-            currentY += maxRowHeight + ySpacing;
-            maxRowHeight = 0;
-        }
+        const layerDimensions = layerNodeIds.map(id => dimensions.get(id)!);
+        const maxNodeWidthInLayer = Math.max(...layerDimensions.map(dim => dim.width));
         
-        let yPosForNode = currentY;
+        let currentY = nodePadding;
         layerNodeIds.forEach(id => {
             const dim = dimensions.get(id)!;
-            positions.set(id, { x: currentX, y: yPosForNode });
-            yPosForNode += dim.height + ySpacing;
+            const xPos = currentX + (maxNodeWidthInLayer - dim.width) / 2;
+            positions.set(id, { x: xPos, y: currentY });
+            currentY += dim.height + ySpacing;
         });
-
-        maxRowHeight = Math.max(maxRowHeight, totalLayerHeight);
         currentX += maxNodeWidthInLayer + xSpacing;
     }
 
-    placeSatelliteNodes(satelliteNodes, edges, positions, dimensions, { x: -400, y: 50 });
+    placeHierarchicalSatellites(satelliteNodes, flowNodes, edges, positions, dimensions);
 
     nodes.forEach(node => {
         if (!positions.has(node.id)) {
@@ -255,74 +280,301 @@ const calculateHierarchicalLayout = (
     return positions;
 };
 
+const getStoryChain = (nodes: Node[], edges: Edge[]): string[] => {
+    const flowNodes = nodes.filter(n => [NodeType.PLOT, NodeType.STRUCTURE].includes(n.type));
+    if (flowNodes.length === 0) return [];
+
+    const adj = new Map<string, string[]>();
+    const inDegree = new Map<string, number>();
+
+    flowNodes.forEach(node => {
+        adj.set(node.id, []);
+        inDegree.set(node.id, 0);
+    });
+
+    edges.forEach(edge => {
+        const sourceNode = nodes.find(n => n.id === edge.source);
+        const targetNode = nodes.find(n => n.id === edge.target);
+        const isFlowEdge = sourceNode && targetNode && 
+                           [NodeType.PLOT, NodeType.STRUCTURE].includes(sourceNode.type) &&
+                           [NodeType.PLOT, NodeType.STRUCTURE].includes(targetNode.type);
+
+        if (isFlowEdge) {
+            adj.get(edge.source)!.push(edge.target);
+            inDegree.set(edge.target, (inDegree.get(edge.target) || 0) + 1);
+        }
+    });
+
+    let startNodeIds = flowNodes
+        .filter(n => n.type === NodeType.STRUCTURE && (n.data as StructureNodeData).category === StructureCategory.STARTING)
+        .map(n => n.id);
+
+    if (startNodeIds.length === 0) {
+        startNodeIds = flowNodes.filter(n => inDegree.get(n.id) === 0).map(n => n.id);
+    }
+    
+    if (startNodeIds.length === 0 && flowNodes.length > 0) {
+        startNodeIds.push(flowNodes[0].id);
+    }
+
+    const chain: string[] = [];
+    const visited = new Set<string>();
+    
+    function dfs(nodeId: string) {
+        if (!nodeId || visited.has(nodeId)) return;
+        
+        visited.add(nodeId);
+        chain.push(nodeId);
+
+        const children = adj.get(nodeId) || [];
+        const sortedChildren = children.sort((a, b) => {
+            const nodeA = nodes.find(n => n.id === a);
+            const nodeB = nodes.find(n => n.id === b);
+            const isAEnd = nodeA?.type === NodeType.STRUCTURE && (nodeA.data as StructureNodeData).category === StructureCategory.ENDING;
+            const isBEnd = nodeB?.type === NodeType.STRUCTURE && (nodeB.data as StructureNodeData).category === StructureCategory.ENDING;
+            if (isAEnd) return 1;
+            if (isBEnd) return -1;
+            return 0;
+        });
+
+        for (const childId of sortedChildren) {
+            dfs(childId);
+        }
+    }
+    
+    if (startNodeIds[0]) {
+        dfs(startNodeIds[0]);
+    }
+
+    flowNodes.forEach(node => {
+        if (!visited.has(node.id)) {
+            chain.push(node.id);
+        }
+    });
+
+    return chain;
+};
+
 const calculateCircularLayout = (
     nodes: Node[],
     edges: Edge[],
     dimensions: Map<string, NodeDimensions>
 ): NodePositions => {
     const positions = new Map<string, { x: number; y: number }>();
-    
-    let centerNodes = nodes.filter(n => n.type === NodeType.SETTING);
-    if (centerNodes.length === 0) centerNodes = nodes.filter(n => n.type === NodeType.WORK);
-    
-    const ring1Nodes = nodes.filter(n => n.type === NodeType.PLOT || n.type === NodeType.STRUCTURE);
-    const ring2Nodes = nodes.filter(n => n.type === NodeType.CHARACTER || n.type === NodeType.ENVIRONMENT);
-    const satelliteNodes = nodes.filter(n => n.type === NodeType.STYLE);
+    const centralNode = nodes.find(n => n.type === NodeType.SETTING);
 
-    const placedNodeIds = new Set<string>();
+    if (centralNode) {
+        // --- NEW LOGIC: Layout around a central SETTING node ---
+        const placedIds = new Set<string>();
+        const mainChainIds = getStoryChain(nodes, edges).filter(id => id !== centralNode.id);
 
-    const placeNodesInCircle = (nodesToPlace: Node[], radius: number, angleOffset = 0) => {
-        if (nodesToPlace.length === 0) return;
-        const angleStep = (2 * Math.PI) / nodesToPlace.length;
-        nodesToPlace.forEach((node, i) => {
-            const angle = i * angleStep + angleOffset;
-            const x = radius * Math.cos(angle);
-            const y = radius * Math.sin(angle);
-            positions.set(node.id, { x, y });
-            placedNodeIds.add(node.id);
+        const mainRadius = Math.max(500, mainChainIds.length * 100);
+        const centerX = mainRadius;
+        const centerY = mainRadius;
+
+        // 1. Place central node
+        const centralNodeDim = dimensions.get(centralNode.id)!;
+        positions.set(centralNode.id, {
+            x: centerX - centralNodeDim.width / 2,
+            y: centerY - centralNodeDim.height / 2
         });
-    };
-    
-    if (centerNodes.length > 0) {
-        placeNodesInCircle(centerNodes, centerNodes.length > 1 ? 150 : 0);
+        placedIds.add(centralNode.id);
+
+        // 2. Place main story chain on the outer ring
+        if (mainChainIds.length > 0) {
+            const angleStep = (2 * Math.PI) / mainChainIds.length;
+            mainChainIds.forEach((nodeId, i) => {
+                const nodeDim = dimensions.get(nodeId)!;
+                const angle = i * angleStep - (Math.PI / 2);
+                const x = centerX + mainRadius * Math.cos(angle) - nodeDim.width / 2;
+                const y = centerY + mainRadius * Math.sin(angle) - nodeDim.height / 2;
+                positions.set(nodeId, { x, y });
+                placedIds.add(nodeId);
+            });
+        }
+        
+        // 3. Iteratively place all other satellite nodes
+        const parentMap = new Map<string, string[]>();
+        nodes.forEach(n => parentMap.set(n.id, []));
+        edges.forEach(edge => {
+            parentMap.get(edge.target)?.push(edge.source);
+            parentMap.get(edge.source)?.push(edge.target);
+        });
+
+        let unplacedNodes = nodes.filter(n => !placedIds.has(n.id));
+        let iterations = 0;
+        while (unplacedNodes.length > 0 && iterations < nodes.length) {
+            const placableNodes = unplacedNodes.filter(node => {
+                const connectedNodes = parentMap.get(node.id) || [];
+                return connectedNodes.length > 0 && connectedNodes.some(pId => placedIds.has(pId));
+            });
+
+            if (placableNodes.length === 0) break;
+
+            const nodesByAnchor = new Map<string, Node[]>();
+            placableNodes.forEach(node => {
+                const anchorId = (parentMap.get(node.id) || []).find(pId => placedIds.has(pId));
+                if (anchorId) {
+                    if (!nodesByAnchor.has(anchorId)) nodesByAnchor.set(anchorId, []);
+                    nodesByAnchor.get(anchorId)!.push(node);
+                }
+            });
+
+            nodesByAnchor.forEach((satellites, anchorId) => {
+                const anchorPos = positions.get(anchorId)!;
+                const anchorDim = dimensions.get(anchorId)!;
+
+                if (anchorId === centralNode.id) {
+                    // Satellites of the central node go in a tight inner circle
+                    const innerRadius = Math.max(centralNodeDim.width, centralNodeDim.height) / 2 + 120;
+                    const angleStep = (2 * Math.PI) / satellites.length;
+                    satellites.forEach((node, i) => {
+                        const nodeDim = dimensions.get(node.id)!;
+                        const angle = i * angleStep + (Math.PI / 6); 
+                        const x = centerX + innerRadius * Math.cos(angle) - nodeDim.width / 2;
+                        const y = centerY + innerRadius * Math.sin(angle) - nodeDim.height / 2;
+                        positions.set(node.id, { x, y });
+                    });
+                } else {
+                    // Satellites of ring nodes go radially outward
+                    const baseVector = { x: anchorPos.x + anchorDim.width / 2 - centerX, y: anchorPos.y + anchorDim.height / 2 - centerY };
+                    const baseAngle = Math.atan2(baseVector.y, baseVector.x);
+                    const radialPadding = 60;
+                    const arcRadius = Math.max(anchorDim.width, anchorDim.height) / 2 + radialPadding;
+                    const totalArcAngle = Math.PI / 4;
+                    const angleStep = satellites.length > 1 ? totalArcAngle / (satellites.length - 1) : 0;
+                    const startAngle = baseAngle - totalArcAngle / 2;
+                    
+                    satellites.forEach((node, i) => {
+                        const nodeDim = dimensions.get(node.id)!;
+                        const angle = satellites.length === 1 ? baseAngle : startAngle + i * angleStep;
+                        const satelliteRadius = arcRadius + Math.max(nodeDim.width, nodeDim.height) / 2;
+                        const x = (anchorPos.x + anchorDim.width / 2) + satelliteRadius * Math.cos(angle) - nodeDim.width / 2;
+                        const y = (anchorPos.y + anchorDim.height / 2) + satelliteRadius * Math.sin(angle) - nodeDim.height / 2;
+                        positions.set(node.id, { x, y });
+                    });
+                }
+            });
+
+            placableNodes.forEach(node => placedIds.add(node.id));
+            unplacedNodes = unplacedNodes.filter(n => !placedIds.has(n.id));
+            iterations++;
+        }
+
+        // Place orphans
+        if (unplacedNodes.length > 0) {
+             let currentY = centerY + mainRadius + 150;
+             unplacedNodes.forEach(node => {
+                 const nodeDim = dimensions.get(node.id)!;
+                 positions.set(node.id, { x: centerX - nodeDim.width / 2, y: currentY });
+                 currentY += nodeDim.height + 20;
+             });
+        }
+
+    } else {
+        // --- FALLBACK LOGIC: No central SETTING node, use previous circular layout ---
+        const mainChainIds = getStoryChain(nodes, edges);
+        const radius = Math.max(250, mainChainIds.length * 90);
+        const centerX = radius;
+        const centerY = radius;
+
+        if (mainChainIds.length > 0) {
+            const angleStep = (2 * Math.PI) / mainChainIds.length;
+            mainChainIds.forEach((nodeId, i) => {
+                const nodeDim = dimensions.get(nodeId)!;
+                const angle = i * angleStep - (Math.PI / 2);
+                const x = centerX + radius * Math.cos(angle) - nodeDim.width / 2;
+                const y = centerY + radius * Math.sin(angle) - nodeDim.height / 2;
+                positions.set(nodeId, { x, y });
+            });
+        }
+
+        const placedNodeIds = new Set<string>(mainChainIds);
+        const parentMap = new Map<string, string[]>();
+        nodes.forEach(n => parentMap.set(n.id, []));
+        edges.forEach(edge => {
+            parentMap.get(edge.target)?.push(edge.source);
+            parentMap.get(edge.source)?.push(edge.target);
+        });
+
+        let unplacedNodes = nodes.filter(n => !placedNodeIds.has(n.id));
+        let iterations = 0;
+        while (unplacedNodes.length > 0 && iterations < nodes.length) {
+            const placableNodes = unplacedNodes.filter(node => {
+                const connectedNodes = parentMap.get(node.id) || [];
+                return connectedNodes.length > 0 && connectedNodes.some(pId => placedNodeIds.has(pId));
+            });
+
+            if (placableNodes.length === 0) break;
+
+            const nodesByAnchor = new Map<string, Node[]>();
+            placableNodes.forEach(node => {
+                const anchorId = (parentMap.get(node.id) || []).find(pId => placedNodeIds.has(pId));
+                if (anchorId) {
+                    if (!nodesByAnchor.has(anchorId)) nodesByAnchor.set(anchorId, []);
+                    nodesByAnchor.get(anchorId)!.push(node);
+                }
+            });
+
+            nodesByAnchor.forEach((satellites, anchorId) => {
+                const anchorPos = positions.get(anchorId)!;
+                const anchorDim = dimensions.get(anchorId)!;
+                const baseVector = { x: anchorPos.x + anchorDim.width / 2 - centerX, y: anchorPos.y + anchorDim.height / 2 - centerY };
+                const baseAngle = Math.atan2(baseVector.y, baseVector.x);
+                const radialPadding = 60;
+                const arcRadius = Math.max(anchorDim.width, anchorDim.height) / 2 + radialPadding;
+                const totalArcAngle = Math.PI / 4;
+                const angleStep = satellites.length > 1 ? totalArcAngle / (satellites.length - 1) : 0;
+                const startAngle = baseAngle - totalArcAngle / 2;
+
+                satellites.forEach((node, i) => {
+                    const nodeDim = dimensions.get(node.id)!;
+                    const angle = satellites.length === 1 ? baseAngle : startAngle + i * angleStep;
+                    const satelliteRadius = arcRadius + Math.max(nodeDim.width, nodeDim.height) / 2;
+                    const x = (anchorPos.x + anchorDim.width / 2) + satelliteRadius * Math.cos(angle) - nodeDim.width / 2;
+                    const y = (anchorPos.y + anchorDim.height / 2) + satelliteRadius * Math.sin(angle) - nodeDim.height / 2;
+                    positions.set(node.id, { x, y });
+                });
+            });
+
+            placableNodes.forEach(node => placedNodeIds.add(node.id));
+            unplacedNodes = unplacedNodes.filter(n => !placedNodeIds.has(n.id));
+            iterations++;
+        }
+
+        if (unplacedNodes.length > 0) {
+            let currentY = centerY + radius + 150;
+            unplacedNodes.forEach(node => {
+                const nodeDim = dimensions.get(node.id)!;
+                positions.set(node.id, { x: centerX - nodeDim.width / 2, y: currentY });
+                currentY += nodeDim.height + 20;
+            });
+        }
     }
-    
-    const ring1Radius = 500;
-    placeNodesInCircle(ring1Nodes, ring1Radius);
-    
-    const ring2Radius = 950;
-    placeNodesInCircle(ring2Nodes, ring2Radius, Math.PI / ring2Nodes.length);
 
-    placeSatelliteNodes(satelliteNodes, edges, positions, dimensions, { x: -ring2Radius - 400, y: -ring2Radius / 2 });
-    satelliteNodes.forEach(sNode => placedNodeIds.add(sNode.id));
+    // Normalize coordinates for both cases
+    let minX = Infinity, minY = Infinity;
+    positions.forEach(pos => {
+        minX = Math.min(minX, pos.x);
+        minY = Math.min(minY, pos.y);
+    });
 
+    if (isFinite(minX) && isFinite(minY)) {
+        positions.forEach((pos, id) => {
+            positions.set(id, { x: pos.x - minX + 50, y: pos.y - minY + 50 });
+        });
+    }
+
+    // Add any nodes that somehow missed placement (should not happen, but safe)
     nodes.forEach(node => {
-        if (!placedNodeIds.has(node.id)) {
+        if (!positions.has(node.id)) {
             positions.set(node.id, node.position);
         }
     });
-    
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    let nodeCount = 0;
-    positions.forEach((pos, id) => {
-        const dim = dimensions.get(id) || { width: 0, height: 0 };
-        minX = Math.min(minX, pos.x);
-        minY = Math.min(minY, pos.y);
-        maxX = Math.max(maxX, pos.x + dim.width);
-        maxY = Math.max(maxY, pos.y + dim.height);
-        nodeCount++;
-    });
-
-    if (nodeCount > 0 && isFinite(minX)) {
-        const centerX = (minX + maxX) / 2;
-        const centerY = (minY + maxY) / 2;
-        positions.forEach((pos, id) => {
-            positions.set(id, { x: pos.x - centerX, y: pos.y - centerY });
-        });
-    }
 
     return positions;
 };
+
 
 export const calculateLayout = async (
     nodes: Node[],
@@ -334,10 +586,9 @@ export const calculateLayout = async (
     const dimensions = await getNodeDimensions(nodes, editorRef);
     
     let positions: NodePositions;
-    const editorWidth = editorRef.current?.clientWidth || 1024;
 
     if (mode === 'hierarchical') {
-        positions = calculateHierarchicalLayout(nodes, edges, dimensions, editorWidth);
+        positions = calculateHierarchicalLayout(nodes, edges, dimensions);
     } else {
         positions = calculateCircularLayout(nodes, edges, dimensions);
     }

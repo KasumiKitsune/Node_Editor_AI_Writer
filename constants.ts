@@ -1,4 +1,6 @@
-import { Plot, PlotCategory, Style, StyleCategory, StructurePlot, StructureCategory } from './types';
+import { Plot, PlotCategory, Style, StyleCategory, StructurePlot, StructureCategory, NodeType } from './types';
+import { PersonIcon, SettingIcon, EnvironmentIcon, StructureIcon, PlotIcon, StyleIcon, BookOpenIcon } from './components/icons';
+import React from 'react';
 
 export const STORY_PLOTS: Plot[] = [
   // 关系与情感 (Relationships & Love)
@@ -143,3 +145,14 @@ export const STORY_STRUCTURES: StructurePlot[] = [
 ];
 
 export const STRUCTURE_CATEGORIES = Object.values(StructureCategory);
+
+
+export const nodeMeta: { [key in NodeType]?: { icon: React.FC<any>; color: string; label: string } } = {
+    [NodeType.PLOT]: { icon: PlotIcon, color: 'bg-blue-500', label: '情节' },
+    [NodeType.CHARACTER]: { icon: PersonIcon, color: 'bg-indigo-500', label: '人物' },
+    [NodeType.SETTING]: { icon: SettingIcon, color: 'bg-purple-500', label: '设定' },
+    [NodeType.STYLE]: { icon: StyleIcon, color: 'bg-pink-500', label: '风格' },
+    [NodeType.STRUCTURE]: { icon: StructureIcon, color: 'bg-amber-500', label: '结构' },
+    [NodeType.WORK]: { icon: BookOpenIcon, color: 'bg-emerald-500', label: '作品' },
+    [NodeType.ENVIRONMENT]: { icon: EnvironmentIcon, color: 'bg-green-500', label: '环境' },
+};

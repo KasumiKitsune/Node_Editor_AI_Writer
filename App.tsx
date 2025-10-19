@@ -18,6 +18,7 @@ import Modal from './components/Modal';
 import { MenuIcon, XIcon, DownloadIcon, PencilIcon, CheckIcon, DocumentAddIcon, TrashIcon, EyeIcon, ArchiveIcon, ChevronDownIcon } from './components/icons';
 import BottomNavBar, { MobileView } from './components/BottomNavBar';
 import NodeTray from './components/NodeTray';
+import Minimap from './components/Minimap';
 
 // Declare global variables from CDN scripts
 declare var JSZip: any;
@@ -142,6 +143,7 @@ const App: React.FC = () => {
   const [currentOutlineIndex, setCurrentOutlineIndex] = useState(0);
   const [storyHistory, setStoryHistory] = useState<string[]>([]);
   const [currentStoryIndex, setCurrentStoryIndex] = useState(0);
+  const [pendingRevision, setPendingRevision] = useState<{ type: 'outline' | 'story', content: any } | null>(null);
   const [storyHeadings, setStoryHeadings] = useState<Heading[]>([]);
   const [revisionPrompt, setRevisionPrompt] = useState('');
   const [assetLibrary, setAssetLibrary] = useState<Asset[]>([]);
@@ -159,6 +161,8 @@ const App: React.FC = () => {
   const [trayNodes, setTrayNodes] = useState<{ type: NodeType; data?: any }[]>([]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isAssetLibraryOpen, setIsAssetLibraryOpen] = useState(false);
+  const [isMinimapOpen, setIsMinimapOpen] = useState(false);
+  const [minimapState, setMinimapState] = useState({ top: 96, right: 20, width: 280, height: 224 });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const storyContentRef = useRef<HTMLDivElement>(null);
@@ -177,6 +181,20 @@ const App: React.FC = () => {
   const previousStory = storyHistory[currentStoryIndex - 1] || null;
   const canUndoStory = currentOutlineIndex > 0;
   const canRedoStory = currentOutlineIndex < storyHistory.length - 1;
+
+  // Helper to get language from setting nodes
+  const getLanguageFromNodes = (nodes: Node[]): string => {
+    const settingNodes = nodes.filter(n => n.type === NodeType.SETTING) as Node<SettingNodeData>[];
+    for (const node of settingNodes) {
+      const languageField = (node.data.fields || []).find(
+        field => field.key === '语言' || field.key.toLowerCase() === 'language'
+      );
+      if (languageField && languageField.value.trim()) {
+        return languageField.value.trim();
+      }
+    }
+    return '中文'; // Default language
+  };
 
   const showAlert = (title: string, message: string) => setAlertModal({ isOpen: true, title, message });
   const showConfirm = (title: string, message: string, onConfirm: () => void) => setConfirmModal({ isOpen: true, title, message, onConfirm });
@@ -281,7 +299,8 @@ const App: React.FC = () => {
   
   const handleLayoutNodes = useCallback(async () => {
     if (nodes.length === 0) return;
-    const { positions, transform: newTransform } = await calculateLayout(nodes, edges, editorRef, layoutMode);
+    const nextLayoutMode = layoutMode === 'hierarchical' ? 'circular' : 'hierarchical';
+    const { positions, transform: newTransform } = await calculateLayout(nodes, edges, editorRef, nextLayoutMode);
     const laidOutNodes = nodes.map(node => {
         const newPos = positions.get(node.id);
         const newNode = newPos ? { ...node, position: newPos } : { ...node };
@@ -290,7 +309,7 @@ const App: React.FC = () => {
     });
     setNodes(laidOutNodes);
     setTransform(newTransform);
-    setLayoutMode(prev => prev === 'hierarchical' ? 'circular' : 'hierarchical');
+    setLayoutMode(nextLayoutMode);
   }, [nodes, edges, editorRef, layoutMode]);
 
   const handleExportNodes = useCallback(() => {
@@ -419,9 +438,10 @@ const App: React.FC = () => {
   const handleGenerateOutline = async () => {
     startProgress('outline', '正在生成大纲...');
     try {
+        const language = getLanguageFromNodes(nodes);
         const wordCount = targetWordCount ? parseInt(targetWordCount, 10) : undefined;
         if (targetWordCount && (isNaN(wordCount) || wordCount < 0)) { showAlert("输入无效", "目标字数必须是一个有效的正数。"); stopProgress(); return; }
-        const result = await withRetry((currentModel) => generateOutline(nodes, edges, '中文', currentModel, wordCount));
+        const result = await withRetry((currentModel) => generateOutline(nodes, edges, language, currentModel, wordCount));
         stopProgress(() => {
             setOutlineHistory([result]); setCurrentOutlineIndex(0);
             setAssetLibrary(prev => [...prev, { type: 'outline', content: result, title: `大纲: ${result.title}`, timestamp: new Date() }]);
@@ -433,11 +453,12 @@ const App: React.FC = () => {
   const handleGenerateStoryFromOutline = async () => {
     if (!currentOutline || !currentOutline.segments || currentOutline.segments.length === 0) { showAlert("无法生成", "请先生成一个有效的故事大纲。"); return; }
     setModalContent(null);
+    const language = getLanguageFromNodes(nodes);
     const isShortForm = currentOutline.segments.length > 0 && currentOutline.segments[0].key_events && !currentOutline.segments[0].chapters;
     if (isShortForm) {
         startProgress('story', '正在创作短篇故事...');
         try {
-            const finalStory = await withRetry((currentModel) => generateShortStory(nodes, edges, currentOutline, '中文', currentModel));
+            const finalStory = await withRetry((currentModel) => generateShortStory(nodes, edges, currentOutline, language, currentModel));
             stopProgress(() => {
                 setStoryHistory([finalStory]); setCurrentStoryIndex(0);
                 setAssetLibrary(prev => [...prev, { type: 'story', content: finalStory, title: `故事: ${currentOutline.title}`, timestamp: new Date() }]);
@@ -457,7 +478,7 @@ const App: React.FC = () => {
                     let success = false, attempts = 0;
                     while (!success && attempts < 2) {
                         try {
-                            const newChapterText = await generateStoryChapter(nodes, edges, currentOutline, accumulatedStory, i, j, '中文', currentModelForLoop);
+                            const newChapterText = await generateStoryChapter(nodes, edges, currentOutline, accumulatedStory, i, j, language, currentModelForLoop);
                             storyParts.push(newChapterText); accumulatedStory += (accumulatedStory ? "\n\n" : "") + newChapterText;
                             success = true; completeStepAndAdvance();
                         } catch (err) {
@@ -482,11 +503,12 @@ const App: React.FC = () => {
   const handleGenerateStoryDirectly = async () => {
     startProgress('story', '正在构思大纲...');
     try {
+        const language = getLanguageFromNodes(nodes);
         const wordCount = parseInt(targetWordCount, 10);
-        const tempOutline = await withRetry((currentModel) => generateOutline(nodes, edges, '中文', currentModel, wordCount));
+        const tempOutline = await withRetry((currentModel) => generateOutline(nodes, edges, language, currentModel, wordCount));
         setOutlineHistory([tempOutline]); setCurrentOutlineIndex(0);
         setProgressMessage('正在创作故事...');
-        const finalStory = await withRetry((currentModel) => generateShortStory(nodes, edges, tempOutline, '中文', currentModel));
+        const finalStory = await withRetry((currentModel) => generateShortStory(nodes, edges, tempOutline, language, currentModel));
         stopProgress(() => {
             setStoryHistory([finalStory]); setCurrentStoryIndex(0);
             setAssetLibrary(prev => [...prev, { type: 'outline', content: tempOutline, title: `大纲: ${tempOutline.title}`, timestamp: new Date() }]);
@@ -500,38 +522,6 @@ const App: React.FC = () => {
     const targetWordCountInt = parseInt(targetWordCount, 10);
     const canGenerateStoryDirectly = !isNaN(targetWordCountInt) && targetWordCountInt > 0 && targetWordCountInt <= 2000;
     if (currentOutline) handleGenerateStoryFromOutline(); else if (canGenerateStoryDirectly) handleGenerateStoryDirectly(); else showAlert("无法生成", "请先生成一个故事大纲，或设定一个低于2000的目标字数以直接生成短篇故事。");
-  };
-
-  const handleRevise = async () => { if (modalContent === 'outline') await handleReviseOutline(); if (modalContent === 'story') await handleReviseStory(); };
-  const handleReviseOutline = async () => {
-    if (!currentOutline || !revisionPrompt.trim()) return;
-    startProgress('revise_outline', '正在修改大纲...');
-    try {
-        const revisedOutline = await withRetry((currentModel) => reviseOutline(currentOutline, revisionPrompt, '中文', currentModel));
-        stopProgress(() => {
-            const newHistory = [...outlineHistory.slice(0, currentOutlineIndex + 1), revisedOutline];
-            setOutlineHistory(newHistory); setCurrentOutlineIndex(newHistory.length - 1);
-            let oldAssetIndex = -1;
-            for (let i = assetLibrary.length - 1; i >= 0; i--) { if (assetLibrary[i].type === 'outline' && JSON.stringify(assetLibrary[i].content) === JSON.stringify(currentOutline)) { oldAssetIndex = i; break; } }
-            if (oldAssetIndex > -1) setAssetLibrary(prev => { const newAssets = [...prev]; newAssets[oldAssetIndex] = { ...newAssets[oldAssetIndex], content: revisedOutline, title: `大纲: ${revisedOutline.title}`}; return newAssets; });
-            setRevisionPrompt('');
-        });
-    } catch (err) { stopProgress(() => showAlert("修改大纲失败", `${err instanceof Error ? err.message : '未知错误'}`)); }
-  };
-  const handleReviseStory = async () => {
-    if (!currentStory || !revisionPrompt.trim()) return;
-    startProgress('revise_story', '正在修改故事...');
-    try {
-        const revisedStory = await withRetry((currentModel) => reviseStory(currentStory, revisionPrompt, '中文', currentModel));
-        stopProgress(() => {
-            const newHistory = [...storyHistory.slice(0, currentStoryIndex + 1), revisedStory];
-            setStoryHistory(newHistory); setCurrentStoryIndex(newHistory.length - 1);
-            let oldAssetIndex = -1;
-            for (let i = assetLibrary.length - 1; i >= 0; i--) { if (assetLibrary[i].type === 'story' && assetLibrary[i].content === currentStory) { oldAssetIndex = i; break; } }
-            if (oldAssetIndex > -1) setAssetLibrary(prev => { const newAssets = [...prev]; newAssets[oldAssetIndex] = { ...newAssets[oldAssetIndex], content: revisedStory }; return newAssets; });
-            setRevisionPrompt('');
-        });
-    } catch (err) { stopProgress(() => showAlert("修改故事失败", `${err instanceof Error ? err.message : '未知错误'}`)); }
   };
 
   const updateAssetOnUndoRedo = (oldContent: StructuredOutline | string, newContent: StructuredOutline | string, type: 'outline' | 'story') => {
@@ -560,6 +550,56 @@ const App: React.FC = () => {
         const newIndex = action === 'undo' ? currentStoryIndex - 1 : currentStoryIndex + 1;
         if (newIndex >= 0 && newIndex < storyHistory.length) { updateAssetOnUndoRedo(storyHistory[currentStoryIndex], storyHistory[newIndex], 'story'); setCurrentStoryIndex(newIndex); }
     }
+  };
+
+  const handleRevise = async () => { if (modalContent === 'outline') await handleReviseOutline(); if (modalContent === 'story') await handleReviseStory(); };
+  const handleReviseOutline = async () => {
+    if (!currentOutline || !revisionPrompt.trim()) return;
+    startProgress('revise_outline', '正在修改大纲...');
+    try {
+        const language = getLanguageFromNodes(nodes);
+        const revisedOutline = await withRetry((currentModel) => reviseOutline(currentOutline, revisionPrompt, language, currentModel));
+        stopProgress(() => {
+            setPendingRevision({ type: 'outline', content: revisedOutline });
+            setRevisionPrompt('');
+        });
+    } catch (err) { stopProgress(() => showAlert("修改大纲失败", `${err instanceof Error ? err.message : '未知错误'}`)); }
+  };
+  const handleReviseStory = async () => {
+    if (!currentStory || !revisionPrompt.trim()) return;
+    startProgress('revise_story', '正在修改故事...');
+    try {
+        const language = getLanguageFromNodes(nodes);
+        const revisedStory = await withRetry((currentModel) => reviseStory(currentStory, revisionPrompt, language, currentModel));
+        stopProgress(() => {
+            setPendingRevision({ type: 'story', content: revisedStory });
+            setRevisionPrompt('');
+        });
+    } catch (err) { stopProgress(() => showAlert("修改故事失败", `${err instanceof Error ? err.message : '未知错误'}`)); }
+  };
+
+  const handleAcceptRevision = () => {
+    if (!pendingRevision) return;
+    if (pendingRevision.type === 'outline') {
+      const newContent = pendingRevision.content as StructuredOutline;
+      const oldContent = currentOutline;
+      const newHistory = [...outlineHistory.slice(0, currentOutlineIndex + 1), newContent];
+      setOutlineHistory(newHistory);
+      setCurrentOutlineIndex(newHistory.length - 1);
+      updateAssetOnUndoRedo(oldContent, newContent, 'outline');
+    } else { // 'story'
+      const newContent = pendingRevision.content as string;
+      const oldContent = currentStory;
+      const newHistory = [...storyHistory.slice(0, currentStoryIndex + 1), newContent];
+      setStoryHistory(newHistory);
+      setCurrentStoryIndex(newHistory.length - 1);
+      updateAssetOnUndoRedo(oldContent, newContent, 'story');
+    }
+    setPendingRevision(null);
+  };
+  
+  const handleRevertRevision = () => {
+    setPendingRevision(null);
   };
 
   const sanitizeAIGraphState = (graph: { nodes: Node[], edges: Edge[] }): { nodes: Node[], edges: Edge[] } => {
@@ -679,6 +719,25 @@ const App: React.FC = () => {
     }
   };
 
+  const handleMinimapNodeClick = useCallback((nodeId: string) => {
+    const node = nodes.find(n => n.id === nodeId);
+    const editor = editorRef.current;
+    if (!node || !editor) return;
+
+    // Use a fixed approximation for node dimensions for simplicity
+    const nodeWidthOnCanvas = 320 * transform.scale;
+    const nodeHeightOnCanvas = 200 * transform.scale;
+
+    const newX = -node.position.x * transform.scale + (editor.clientWidth / 2) - (nodeWidthOnCanvas / 2);
+    const newY = -node.position.y * transform.scale + (editor.clientHeight / 2) - (nodeHeightOnCanvas / 2);
+
+    setTransform(t => ({ ...t, x: newX, y: newY }));
+  }, [nodes, transform.scale]);
+
+  const handleMinimapPan = useCallback((newTransform: { x: number; y: number; scale: number }) => {
+    setTransform(newTransform);
+  }, []);
+
   const renderAssetLibraryPage = (isModal: boolean) => {
     return (
         <div className={`w-full h-full flex flex-col ${isModal ? 'max-h-[70vh]' : 'p-4 bg-slate-100 dark:bg-slate-950'}`}>
@@ -769,7 +828,7 @@ const App: React.FC = () => {
                             )}
                             <div onClick={() => setIsSidebarOpen(false)} className={`fixed inset-0 bg-black z-20 transition-opacity duration-300 ${isSidebarOpen ? 'opacity-40' : 'opacity-0 pointer-events-none'}`} />
                             <NodeEditor nodes={nodes} edges={edges} transform={transform} setTransform={setTransform} onNodesChange={setNodes} onEdgesChange={setEdges} onUpdateNodeData={updateNodeData} onDeleteNode={deleteNode} onToggleNodeCollapse={handleToggleNodeCollapse} onAnalyzeWork={handleAnalyzeWork} onExpandSetting={handleExpandSetting} onNodeSelect={bringNodeToFront} activeProgressTask={activeProgressTask} progress={progress} editorRef={editorRef} highlightedNodeId={highlightedNodeId} setHighlightedNodeId={setHighlightedNodeId} />
-                            <Toolbar model={model} setModel={setModel} isGenerating={isAnyTaskRunning} onClearAllNodes={handleClearAllNodes} onImportNodes={triggerImport} onExportNodes={handleExportNodes} onLayoutNodes={handleLayoutNodes} layoutMode={layoutMode} theme={theme} setTheme={setTheme} />
+                            <Toolbar model={model} setModel={setModel} isGenerating={isAnyTaskRunning} onClearAllNodes={handleClearAllNodes} onImportNodes={triggerImport} onExportNodes={handleExportNodes} onLayoutNodes={handleLayoutNodes} layoutMode={layoutMode} theme={theme} setTheme={setTheme} isMinimapOpen={isMinimapOpen} onToggleMinimap={() => setIsMinimapOpen(p => !p)} />
                          </div>
                          {mobileView === 'library' && (
                              <div className="h-full flex flex-col">
@@ -804,7 +863,20 @@ const App: React.FC = () => {
                     <Sidebar sidebarRef={sidebarRef} onAddNode={addNode} isOpen={true} onClose={() => {}} dragOffset={null} />
                     <main className="relative flex-1 h-full">
                         <NodeEditor nodes={nodes} edges={edges} transform={transform} setTransform={setTransform} onNodesChange={setNodes} onEdgesChange={setEdges} onUpdateNodeData={updateNodeData} onDeleteNode={deleteNode} onToggleNodeCollapse={handleToggleNodeCollapse} onAnalyzeWork={handleAnalyzeWork} onExpandSetting={handleExpandSetting} onNodeSelect={bringNodeToFront} activeProgressTask={activeProgressTask} progress={progress} editorRef={editorRef} highlightedNodeId={highlightedNodeId} setHighlightedNodeId={setHighlightedNodeId} />
-                        <Toolbar model={model} setModel={setModel} isGenerating={isAnyTaskRunning} onClearAllNodes={handleClearAllNodes} onImportNodes={triggerImport} onExportNodes={handleExportNodes} onLayoutNodes={handleLayoutNodes} layoutMode={layoutMode} theme={theme} setTheme={setTheme} />
+                        <Toolbar model={model} setModel={setModel} isGenerating={isAnyTaskRunning} onClearAllNodes={handleClearAllNodes} onImportNodes={triggerImport} onExportNodes={handleExportNodes} onLayoutNodes={handleLayoutNodes} layoutMode={layoutMode} theme={theme} setTheme={setTheme} isMinimapOpen={isMinimapOpen} onToggleMinimap={() => setIsMinimapOpen(p => !p)} />
+                        {!isMobile && isMinimapOpen && (
+                            <Minimap
+                                nodes={nodes}
+                                edges={edges}
+                                transform={transform}
+                                editorRef={editorRef}
+                                onNodeClick={handleMinimapNodeClick}
+                                onPan={handleMinimapPan}
+                                onClose={() => setIsMinimapOpen(false)}
+                                minimapState={minimapState}
+                                setMinimapState={setMinimapState}
+                            />
+                        )}
                         {isAnyTaskRunning && (
                             <div className="absolute bottom-28 right-5 z-40 flex flex-col items-end gap-4 pointer-events-none">
                                 {(activeProgressTask === 'outline' || activeProgressTask === 'story' || activeProgressTask?.startsWith('revise')) && (
@@ -834,7 +906,37 @@ const App: React.FC = () => {
             onRevert={handleRevertChanges} 
         />
         <HelpModal isOpen={isHelpModalOpen} onClose={() => setIsHelpModalOpen(false)} onLoadExample={handleLoadExample} />
-        <ResultModals modalContent={modalContent} outline={currentOutline} previousOutline={previousOutline} story={currentStory} previousStory={previousStory} storyHeadings={storyHeadings} storyContentRef={storyContentRef} isAnyTaskRunning={isAnyTaskRunning} activeProgressTask={activeProgressTask} progress={progress} revisionPrompt={revisionPrompt} onRevisionPromptChange={setRevisionPrompt} onRevise={handleRevise} isRevising={activeProgressTask === 'revise_outline' || activeProgressTask === 'revise_story'} onClose={() => { setModalContent(null); setCameFromAssetLibrary(false); }} onBack={cameFromAssetLibrary ? () => { setModalContent(null); if (isMobile) { setMobileView('assets'); } else { setIsAssetLibraryOpen(true); } setCameFromAssetLibrary(false); } : undefined} onGenerateStory={handleGenerateStoryFromOutline} onCopy={handleCopy} onDownload={handleDownloadFromResultModal} onTocClick={handleTocClick} onHeadingsParse={setStoryHeadings} canUndo={modalContent === 'outline' ? canUndoOutline : canUndoStory} canRedo={modalContent === 'outline' ? canRedoOutline : canRedoStory} onUndo={() => handleUndoRedo(modalContent!, 'undo')} onRedo={() => handleUndoRedo(modalContent!, 'redo')} />
+        <ResultModals 
+            modalContent={modalContent} 
+            outline={pendingRevision?.type === 'outline' ? pendingRevision.content : currentOutline}
+            previousOutline={pendingRevision?.type === 'outline' ? currentOutline : previousOutline} 
+            story={pendingRevision?.type === 'story' ? pendingRevision.content : currentStory} 
+            previousStory={pendingRevision?.type === 'story' ? currentStory : previousStory} 
+            storyHeadings={storyHeadings} 
+            storyContentRef={storyContentRef} 
+            isAnyTaskRunning={isAnyTaskRunning} 
+            activeProgressTask={activeProgressTask} 
+            progress={progress} 
+            revisionPrompt={revisionPrompt} 
+            onRevisionPromptChange={setRevisionPrompt} 
+            onRevise={handleRevise} 
+            isRevising={activeProgressTask === 'revise_outline' || activeProgressTask === 'revise_story'} 
+            onClose={() => { setModalContent(null); setCameFromAssetLibrary(false); setPendingRevision(null); }} 
+            onBack={cameFromAssetLibrary ? () => { setModalContent(null); if (isMobile) { setMobileView('assets'); } else { setIsAssetLibraryOpen(true); } setCameFromAssetLibrary(false); setPendingRevision(null); } : undefined} 
+            onGenerateStory={handleGenerateStoryFromOutline} 
+            onCopy={handleCopy} 
+            onDownload={handleDownloadFromResultModal} 
+            onTocClick={handleTocClick} 
+            onHeadingsParse={setStoryHeadings} 
+            canUndo={modalContent === 'outline' ? canUndoOutline : canUndoStory} 
+            canRedo={modalContent === 'outline' ? canRedoOutline : canRedoStory} 
+            onUndo={() => handleUndoRedo(modalContent!, 'undo')} 
+            onRedo={() => handleUndoRedo(modalContent!, 'redo')}
+            isAwaitingRevisionConfirmation={!!pendingRevision}
+            onAcceptRevision={handleAcceptRevision}
+            onRevertRevision={handleRevertRevision}
+            isMobile={isMobile}
+        />
         <AlertModal isOpen={alertModal.isOpen} onClose={closeAlert} title={alertModal.title}><p>{alertModal.message}</p></AlertModal>
         <ConfirmModal isOpen={confirmModal.isOpen} onCancel={closeConfirm} onConfirm={handleConfirm} title={confirmModal.title}><p>{confirmModal.message}</p></ConfirmModal>
         <input type="file" ref={fileInputRef} onChange={handleFileImport} style={{ display: 'none' }} accept=".json" />

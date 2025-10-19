@@ -2,8 +2,8 @@ import React, { useMemo, useState, useEffect, useRef } from 'react';
 import Modal from './Modal';
 // FIX: Added default import for MarkdownRenderer to resolve reference error.
 import MarkdownRenderer, { renderLineWithInlineFormatting } from './MarkdownRenderer';
-import { StructuredOutline, Chapter } from '../types';
-import { CopyIcon, DownloadIcon, UndoIcon, RedoIcon, EyeIcon, CompareIcon, ChevronDownIcon, SendIcon } from './icons';
+import { StructuredOutline, Chapter, Node, NodeType, CharacterNodeData, SettingNodeData } from '../types';
+import { CopyIcon, DownloadIcon, UndoIcon, RedoIcon, EyeIcon, CompareIcon, ChevronDownIcon, SendIcon, XIcon, CheckIcon, PersonIcon, SettingIcon, BookOpenIcon } from './icons';
 
 interface Heading {
   id: string;
@@ -74,6 +74,10 @@ interface ResultModalsProps {
     onDownload: (type: 'outline' | 'story', format: 'txt' | 'json' | 'md' | 'docx') => void;
     onTocClick: (id: string) => void;
     onHeadingsParse: (headings: Heading[]) => void;
+    isAwaitingRevisionConfirmation: boolean;
+    onAcceptRevision: () => void;
+    onRevertRevision: () => void;
+    isMobile: boolean;
 }
 
 interface DownloadDropdownProps {
@@ -87,7 +91,8 @@ const DownloadDropdown: React.FC<DownloadDropdownProps> = ({ assetType, onSelect
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
-            if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+            // FIX: Explicitly use 'globalThis.Node' to disambiguate from the imported 'Node' type from '../types', resolving a type conflict with the DOM's Node interface.
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target as globalThis.Node)) {
                 setIsOpen(false);
             }
         };
@@ -185,7 +190,11 @@ const ResultModals: React.FC<ResultModalsProps> = ({
     onCopy,
     onDownload,
     onTocClick,
-    onHeadingsParse
+    onHeadingsParse,
+    isAwaitingRevisionConfirmation,
+    onAcceptRevision,
+    onRevertRevision,
+    isMobile,
 }) => {
     
     const [viewMode, setViewMode] = useState<'diff' | 'read'>('read');
@@ -202,15 +211,15 @@ const ResultModals: React.FC<ResultModalsProps> = ({
     }, [revisionPrompt]); // Rerun when text changes
     
     useEffect(() => {
-        if ((modalContent === 'outline' && previousOutline) || (modalContent === 'story' && previousStory)) {
+        if ((modalContent === 'outline' && previousOutline) || (modalContent === 'story' && previousStory) || isAwaitingRevisionConfirmation) {
             setViewMode('diff');
         } else {
             setViewMode('read');
         }
-    }, [modalContent, previousOutline, previousStory]);
+    }, [modalContent, previousOutline, previousStory, isAwaitingRevisionConfirmation]);
 
     const showDiff = viewMode === 'diff';
-    const hasPreviousVersion = !!previousOutline || !!previousStory;
+    const hasPreviousVersion = !!previousOutline || !!previousStory || isAwaitingRevisionConfirmation;
 
     const StoryDiffView: React.FC<{ oldText: string, newText: string }> = ({ oldText, newText }) => {
         const diffResult = useMemo(() => diffLines(oldText, newText), [oldText, newText]);
@@ -250,66 +259,140 @@ const ResultModals: React.FC<ResultModalsProps> = ({
 
     const renderActionButtons = () => (
         <div className="mt-6 pt-6 border-t border-slate-200 dark:border-slate-800">
-            <div className="flex flex-col gap-4">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div className="flex items-center space-x-1">
-                        <button onClick={onUndo} disabled={!canUndo || isRevising} className="p-3 bg-slate-200 dark:bg-slate-800 rounded-full disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors btn-material" title="撤销"><UndoIcon className="h-5 w-5"/></button>
-                        <button onClick={onRedo} disabled={!canRedo || isRevising} className="p-3 bg-slate-200 dark:bg-slate-800 rounded-full disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors btn-material" title="重做"><RedoIcon className="h-5 w-5"/></button>
-                        <button onClick={() => setViewMode(v => v === 'diff' ? 'read' : 'diff')} disabled={!hasPreviousVersion} className="p-3 bg-slate-200 dark:bg-slate-800 rounded-full disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors btn-material" title={viewMode === 'diff' ? '阅读视图' : '对比视图'}>
-                            {viewMode === 'diff' ? <EyeIcon className="h-5 w-5"/> : <CompareIcon className="h-5 w-5"/>}
-                        </button>
+            {isAwaitingRevisionConfirmation ? (
+                <div className="flex flex-col gap-4">
+                     <div className="flex items-center justify-between">
+                        <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">AI 已完成修改，请选择操作：</p>
+                        <div className="flex items-center space-x-2">
+                            <button onClick={onRevertRevision} className="flex items-center justify-center gap-2 px-4 h-11 bg-red-500/10 text-red-700 dark:text-red-400 rounded-full hover:bg-red-500/20 transition-colors btn-material" title="回退">
+                                <XIcon className="h-5 w-5" />
+                                {!isMobile && <span>回退</span>}
+                            </button>
+                            <button onClick={onAcceptRevision} className="flex items-center justify-center gap-2 px-4 h-11 bg-green-500/10 text-green-700 dark:text-green-400 rounded-full hover:bg-green-500/20 transition-colors btn-material" title="接受">
+                                <CheckIcon className="h-5 w-5" />
+                                {!isMobile && <span>接受</span>}
+                            </button>
+                        </div>
                     </div>
+                </div>
+            ) : (
+                <div className="flex flex-col gap-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div className="flex items-center space-x-1">
+                            <button onClick={onUndo} disabled={!canUndo || isRevising} className="p-3 bg-slate-200 dark:bg-slate-800 rounded-full disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors btn-material" title="撤销"><UndoIcon className="h-5 w-5"/></button>
+                            <button onClick={onRedo} disabled={!canRedo || isRevising} className="p-3 bg-slate-200 dark:bg-slate-800 rounded-full disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors btn-material" title="重做"><RedoIcon className="h-5 w-5"/></button>
+                            <button onClick={() => setViewMode(v => v === 'diff' ? 'read' : 'diff')} disabled={!hasPreviousVersion} className="p-3 bg-slate-200 dark:bg-slate-800 rounded-full disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors btn-material" title={viewMode === 'diff' ? '阅读视图' : '对比视图'}>
+                                {viewMode === 'diff' ? <EyeIcon className="h-5 w-5"/> : <CompareIcon className="h-5 w-5"/>}
+                            </button>
+                        </div>
 
-                    {modalContent === 'outline' && (
-                        <button 
-                            onClick={onGenerateStory}
-                            disabled={isAnyTaskRunning || !outline}
-                            className="px-6 h-12 bg-emerald-600 text-white font-bold rounded-full hover:bg-emerald-500 transition-colors disabled:bg-slate-500 dark:disabled:bg-slate-700 disabled:text-slate-100 dark:disabled:text-slate-400 disabled:cursor-not-allowed shadow-lg shadow-emerald-500/20 hover:shadow-emerald-500/40 btn-material"
-                        >
-                            {activeProgressTask === 'story' ? '生成中...' : '开始创作'}
-                        </button>
-                    )}
-                </div>
-                
-                <div className="relative w-full bg-slate-200 dark:bg-slate-800 rounded-[28px] transition-all duration-200 focus-within:ring-2 focus-within:ring-blue-500/80">
-                    <textarea
-                        ref={textareaRef}
-                        id="revision-prompt"
-                        value={revisionPrompt}
-                        onChange={(e) => onRevisionPromptChange(e.target.value)}
-                        onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); onRevise(); } }}
-                        placeholder="迭代修改需求 (Ctrl+Enter 发送)"
-                        className="w-full bg-transparent text-slate-900 dark:text-slate-100 text-base border-none focus:outline-none focus:ring-0 disabled:bg-transparent placeholder-slate-500 dark:placeholder-slate-400 resize-none overflow-y-hidden p-4 pr-28 box-border"
-                        disabled={isRevising}
-                        rows={1}
-                    />
-                    <div className="absolute right-1.5 top-1/2 -translate-y-1/2">
-                        <button
-                            onClick={onRevise}
-                            disabled={isRevising || !revisionPrompt.trim()}
-                            className={`h-11 bg-purple-600 text-white font-semibold rounded-full hover:bg-purple-500 transition-all duration-200 disabled:bg-slate-500 dark:disabled:bg-slate-600 flex items-center justify-center flex-shrink-0 transform disabled:scale-100 btn-material ${
-                                isRevising ? 'w-11' : 'px-6 hover:scale-105'
-                            }`}
-                            aria-label="发送修改"
-                        >
-                            {isRevising ? (
-                                <PieChartProgress progress={progress} />
-                            ) : (
-                                <span>发送</span>
-                            )}
-                        </button>
+                        {modalContent === 'outline' && (
+                            <button 
+                                onClick={onGenerateStory}
+                                disabled={isAnyTaskRunning || !outline}
+                                className="px-6 h-12 bg-emerald-600 text-white font-bold rounded-full hover:bg-emerald-500 transition-colors disabled:bg-slate-500 dark:disabled:bg-slate-700 disabled:text-slate-100 dark:disabled:text-slate-400 disabled:cursor-not-allowed shadow-lg shadow-emerald-500/20 hover:shadow-emerald-500/40 btn-material"
+                            >
+                                {activeProgressTask === 'story' ? '生成中...' : '开始创作'}
+                            </button>
+                        )}
+                    </div>
+                    
+                    <div className="relative w-full bg-slate-200 dark:bg-slate-800 rounded-[28px] transition-all duration-200 focus-within:ring-2 focus-within:ring-blue-500/80">
+                        <textarea
+                            ref={textareaRef}
+                            id="revision-prompt"
+                            value={revisionPrompt}
+                            onChange={(e) => onRevisionPromptChange(e.target.value)}
+                            onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); onRevise(); } }}
+                            placeholder="迭代修改需求 (Ctrl+Enter 发送)"
+                            className="w-full bg-transparent text-slate-900 dark:text-slate-100 text-base border-none focus:outline-none focus:ring-0 disabled:bg-transparent placeholder-slate-500 dark:placeholder-slate-400 resize-none overflow-y-hidden p-4 pr-28 box-border"
+                            disabled={isRevising}
+                            rows={1}
+                        />
+                        <div className="absolute right-1.5 top-1/2 -translate-y-1/2">
+                            <button
+                                onClick={onRevise}
+                                disabled={isRevising || !revisionPrompt.trim()}
+                                className={`h-11 bg-purple-600 text-white font-semibold rounded-full hover:bg-purple-500 transition-all duration-200 disabled:bg-slate-500 dark:disabled:bg-slate-600 flex items-center justify-center flex-shrink-0 transform disabled:scale-100 btn-material ${
+                                    isRevising ? 'w-11' : 'px-6 hover:scale-105'
+                                }`}
+                                aria-label="发送修改"
+                            >
+                                {isRevising ? (
+                                    <PieChartProgress progress={progress} />
+                                ) : (
+                                    <span>发送</span>
+                                )}
+                            </button>
+                        </div>
                     </div>
                 </div>
-            </div>
+            )}
         </div>
     );
 
     return (
         <>
-            <Modal isOpen={modalContent === 'outline' && !!outline} onClose={onClose} onBack={onBack} title={`故事大纲: ${outline?.title || ''}`} headerActions={modalHeaderActions}>
+            <Modal isOpen={modalContent === 'outline' && !!outline} onClose={onClose} onBack={onBack} title={`故事大纲: ${outline?.title || ''}`} headerActions={modalHeaderActions} hideCloseButtonOnMobile={!!onBack}>
                 <div className="w-full h-full flex flex-col">
-                    <div className="flex-grow min-h-0 overflow-y-auto bg-slate-50/50 dark:bg-slate-900/50 text-slate-800 dark:text-slate-200 p-4 rounded-3xl border border-slate-200 dark:border-slate-800">
+                    <div className="flex-grow min-h-0 overflow-y-auto p-2 md:p-0">
                         <div className="space-y-6">
+                            {/* Top row: Character and Setting cards */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <div className="h-full bg-white dark:bg-slate-800/60 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700/50 p-4">
+                                        <h3 className="flex items-center text-lg font-bold text-indigo-600 dark:text-indigo-400 mb-3">
+                                            <PersonIcon className="h-5 w-5 mr-2" />
+                                            主要人物
+                                        </h3>
+                                        <div className="space-y-3 text-sm">
+                                            {outline?.main_characters && outline.main_characters.length > 0 ? outline.main_characters.map(char => (
+                                                <div key={char.name}>
+                                                    <p className="font-semibold text-slate-800 dark:text-slate-200">{char.name}</p>
+                                                    <ul className="list-disc list-inside text-slate-500 dark:text-slate-400 pl-2">
+                                                        {char.attributes.map((attr, index) => (
+                                                            <li key={index} className="truncate" title={attr}>{attr}</li>
+                                                        ))}
+                                                    </ul>
+                                                </div>
+                                            )) : <p className="text-slate-500 dark:text-slate-400 italic">未设定人物</p>}
+                                        </div>
+                                    </div>
+                                </div>
+                                <div>
+                                    <div className="h-full bg-white dark:bg-slate-800/60 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700/50 p-4">
+                                        <h3 className="flex items-center text-lg font-bold text-purple-600 dark:text-purple-400 mb-3">
+                                            <SettingIcon className="h-5 w-5 mr-2" />
+                                            作品信息
+                                        </h3>
+                                        <div className="space-y-2 text-sm">
+                                            {outline?.work_info ? (
+                                                <>
+                                                    <div className="flex justify-between">
+                                                        <span className="font-semibold text-slate-600 dark:text-slate-300 flex-shrink-0">目标篇幅:</span>
+                                                        <span className="text-slate-800 dark:text-slate-200 text-right pl-2">{outline.work_info.target_word_count || '未指定'}</span>
+                                                    </div>
+                                                    {outline.work_info.settings.map((setting, index) => {
+                                                        const parts = setting.split(/:\s|：\s/);
+                                                        const key = parts[0];
+                                                        const value = parts.slice(1).join(': ');
+                                                        return (
+                                                            <div key={index} className="flex justify-between">
+                                                                <span className="font-semibold text-slate-600 dark:text-slate-300 flex-shrink-0">{key}:</span>
+                                                                <span className="text-slate-800 dark:text-slate-200 truncate pl-2 text-right" title={value}>{value}</span>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                    {outline.work_info.settings.length === 0 && <p className="text-slate-500 dark:text-slate-400">未添加作品设定</p>}
+                                                </>
+                                            ) : <p className="text-slate-500 dark:text-slate-400 italic">未生成作品信息</p>}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            {/* Plot Segments */}
+                            <h2 className="text-2xl font-bold text-monet-dark dark:text-blue-400 px-2 pt-2">情节发展</h2>
                             {outline?.segments.map((segment, index) => {
                                 const prevSegment = previousOutline?.segments.find(s => s.segment_title === segment.segment_title);
                                 const isNewSegment = !prevSegment;
@@ -360,13 +443,26 @@ const ResultModals: React.FC<ResultModalsProps> = ({
                                     </div>
                                 </div>
                             )})}
+
+                             {/* Synopsis */}
+                            {outline?.synopsis && (
+                                <div>
+                                     <div className="p-4 bg-white dark:bg-slate-800/60 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700/50">
+                                        <h3 className="flex items-center text-lg font-bold text-teal-600 dark:text-teal-400 mb-3">
+                                            <BookOpenIcon className="h-5 w-5 mr-2" />
+                                            情节梗概
+                                        </h3>
+                                        <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">{outline.synopsis}</p>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </div>
                     {renderActionButtons()}
                 </div>
             </Modal>
 
-            <Modal isOpen={modalContent === 'story'} onClose={onClose} onBack={onBack} title={`故事: ${outline?.title || ''}`} headerActions={modalHeaderActions}>
+            <Modal isOpen={modalContent === 'story'} onClose={onClose} onBack={onBack} title={`故事: ${outline?.title || ''}`} headerActions={modalHeaderActions} hideCloseButtonOnMobile={!!onBack}>
                 <div className="w-full h-full flex flex-col">
                     <div className="flex flex-grow overflow-hidden gap-6 min-h-0">
                         {storyHeadings.length > 0 && (

@@ -19,12 +19,12 @@ const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose, onLoadExample })
 
   const tabs: { id: Tab; label: string; content: string }[] = [
     { id: 'manual', label: '使用说明', content: MANUAL_CONTENT },
-    { id: 'general', label: '一般用途示例', content: GENERAL_EXAMPLE_CONTENT },
-    { id: 'expand', label: '概念扩展', content: EXPANSION_EXAMPLE_CONTENT },
-    { id: 'rewrite', label: '重塑故事', content: REWRITE_EXAMPLE_CONTENT },
-    { id: 'assistant', label: 'AI助手交互', content: ASSISTANT_EXAMPLE_CONTENT },
-    { id: 'continuation', label: '文本续写', content: CONTINUATION_EXAMPLE_CONTENT },
-    { id: 'parody', label: '风格仿写', content: PARODY_EXAMPLE_CONTENT },
+    { id: 'general', label: '文学叙事示例', content: GENERAL_EXAMPLE_CONTENT },
+    { id: 'expand', label: 'AI 概念扩展', content: EXPANSION_EXAMPLE_CONTENT },
+    { id: 'rewrite', label: 'AI 重塑故事', content: REWRITE_EXAMPLE_CONTENT },
+    { id: 'assistant', label: 'AI 助手交互', content: ASSISTANT_EXAMPLE_CONTENT },
+    { id: 'continuation', label: 'AI 文本续写', content: CONTINUATION_EXAMPLE_CONTENT },
+    { id: 'parody', label: 'AI 风格仿写', content: PARODY_EXAMPLE_CONTENT },
   ];
   
   const activeTabData = tabs.find(tab => tab.id === activeTab);

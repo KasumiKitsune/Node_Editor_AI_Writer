@@ -253,6 +253,18 @@ export const CircularLayoutIcon: React.FC<React.SVGProps<SVGSVGElement>> = ({ cl
     </svg>
 );
 
+export const MapIcon: React.FC<React.SVGProps<SVGSVGElement>> = ({ className, ...props }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" className={className || "h-6 w-6"} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} {...props}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13v-6m0-4V3l6 3m6 13l-6-3m6 3V7l-6-3M9 7l6-3" />
+    </svg>
+);
+
+export const MinimapNodeIcon: React.FC<React.SVGProps<SVGSVGElement>> = ({ className, ...props }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" fill="currentColor" {...props} className={className || "h-6 w-6"}>
+        <path d="m200-120-40-40 320-720 320 720-40 40-280-120-280 120Zm84-124 196-84 196 84-196-440-196 440Zm196-84Z"/>
+    </svg>
+);
+
 
 export interface CustomSelectOption {
   value: string;
@@ -321,7 +333,7 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({ options, value, onCh
       </button>
       {isOpen && (
         <div 
-            className="absolute z-20 mt-2 w-full bg-slate-50 dark:bg-slate-800 rounded-2xl shadow-lg border border-slate-200 dark:border-slate-700 max-h-60 overflow-auto animate-scale-in" 
+            className="absolute z-30 mt-2 w-full bg-slate-50 dark:bg-slate-800 rounded-2xl shadow-lg border border-slate-200 dark:border-slate-700 max-h-60 overflow-auto animate-scale-in" 
             style={{ animationDuration: '150ms'}}
         >
           <ul className="p-2 space-y-1">

@@ -1,5 +1,5 @@
 import React from 'react';
-import { TrashIcon, DownloadIcon, UploadIcon, SunIcon, MoonIcon, CustomSelect, CustomSelectOption, LightningBoltIcon, LightbulbIcon, BrainIcon, LayoutIcon, CircularLayoutIcon } from './icons';
+import { TrashIcon, DownloadIcon, UploadIcon, SunIcon, MoonIcon, CustomSelect, CustomSelectOption, LightningBoltIcon, LightbulbIcon, BrainIcon, LayoutIcon, CircularLayoutIcon, MinimapNodeIcon } from './icons';
 import { LayoutMode } from '../services/layout';
 
 interface ToolbarProps {
@@ -13,9 +13,11 @@ interface ToolbarProps {
   layoutMode: LayoutMode;
   theme: 'light' | 'dark';
   setTheme: (theme: 'light' | 'dark') => void;
+  isMinimapOpen: boolean;
+  onToggleMinimap: () => void;
 }
 
-const CoreButtons: React.FC<Pick<ToolbarProps, 'setTheme' | 'theme' | 'onImportNodes' | 'onExportNodes' | 'onClearAllNodes' | 'onLayoutNodes' | 'layoutMode'>> = ({
+const CoreButtons: React.FC<Pick<ToolbarProps, 'setTheme' | 'theme' | 'onImportNodes' | 'onExportNodes' | 'onClearAllNodes' | 'onLayoutNodes' | 'layoutMode' | 'isMinimapOpen' | 'onToggleMinimap'>> = ({
     setTheme,
     theme,
     onImportNodes,
@@ -23,18 +25,27 @@ const CoreButtons: React.FC<Pick<ToolbarProps, 'setTheme' | 'theme' | 'onImportN
     onClearAllNodes,
     onLayoutNodes,
     layoutMode,
+    isMinimapOpen,
+    onToggleMinimap,
 }) => {
     const buttonClasses = "w-12 h-12 flex items-center justify-center bg-slate-200/80 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300 rounded-full hover:bg-slate-300 dark:hover:bg-slate-700 transition-all duration-150 btn-material";
     
-    // The icon should represent the layout mode that WILL BE applied on the next click.
-    // The `layoutMode` state toggles AFTER the layout is performed.
-    // So, if the current layout is hierarchical, the state for the NEXT action will be 'circular'.
-    // Therefore, we show the icon for the mode OPPOSITE to the one currently in state to reflect the visible state.
+    // The icon shows the layout that WILL BE applied next.
+    // The title describes the CURRENT state.
+    // If current mode is 'hierarchical', the next click will apply 'circular'.
     const LayoutButtonIcon = layoutMode === 'hierarchical' ? CircularLayoutIcon : LayoutIcon;
-    const layoutButtonTitle = layoutMode === 'hierarchical' ? '当前为环形布局' : '当前为分层布局';
+    const layoutButtonTitle = layoutMode === 'hierarchical' ? '切换为环形布局' : '切换为分层布局';
+    const activeMinimapClass = isMinimapOpen ? 'bg-blue-300 dark:bg-blue-800 text-blue-800 dark:text-blue-200' : 'hover:text-blue-500 dark:hover:text-blue-300';
 
     return (
         <>
+            <button
+                onClick={onToggleMinimap}
+                className={`${buttonClasses} ${activeMinimapClass} hidden md:flex`}
+                title="切换小地图"
+            >
+                <MinimapNodeIcon className="h-6 w-6" />
+            </button>
             <button
                 onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
                 className={`${buttonClasses} hover:text-amber-500 dark:hover:text-amber-300`}

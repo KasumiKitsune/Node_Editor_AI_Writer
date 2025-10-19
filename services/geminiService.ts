@@ -283,13 +283,47 @@ export const generateOutline = async (nodes: Node[], edges: Edge[], language: st
 
   let storyStructureInstruction: string;
   let responseSchema: any;
+  
+  const characterAndSettingSchema = {
+    main_characters: {
+        type: Type.ARRAY,
+        description: "基于所有CHARACTER节点，总结出1-3位主要人物。如果节点信息不足，则根据情节推断。",
+        items: {
+            type: Type.OBJECT,
+            properties: {
+                name: { type: Type.STRING, description: "人物姓名或称号。" },
+                attributes: { 
+                    type: Type.ARRAY, 
+                    description: "一个字符串列表，每个字符串描述一个关键属性，格式为 '属性: 描述' (例如 '职业: 画家')。",
+                    items: { type: Type.STRING }
+                }
+            },
+            required: ["name", "attributes"]
+        }
+    },
+    work_info: {
+        type: Type.OBJECT,
+        description: "总结作品的关键信息。",
+        properties: {
+            target_word_count: { type: Type.STRING, description: `用户设定的目标篇幅。如果用户指定了字数，格式化为 '~${targetWordCount} 字'。如果未指定，则返回 '未指定'。` },
+            settings: {
+                type: Type.ARRAY,
+                description: "一个字符串列表，每个字符串描述一个来自SETTING节点的核心设定，格式为 '设定名: 设定值' (例如 '体裁: 科幻')。如果没有设定节点，则返回空数组。",
+                items: { type: Type.STRING }
+            }
+        },
+        required: ["target_word_count", "settings"]
+    }
+  };
 
   if (isShortStory) {
-    storyStructureInstruction = `2.  **No Chapters**: This is a short story, so you MUST NOT create chapters. Create a single segment and provide a concise, bullet-point list of \`key_events\` for the entire story directly within that segment.`;
+    storyStructureInstruction = `3.  **No Chapters**: This is a short story, so you MUST NOT create chapters. Create a single segment and provide a concise, bullet-point list of \`key_events\` for the entire story directly within that segment.`;
     responseSchema = {
         type: Type.OBJECT,
         properties: {
             title: { type: Type.STRING, description: "The overall title of the story." },
+            synopsis: { type: Type.STRING, description: "A concise, one-paragraph summary of the entire story plot." },
+            ...characterAndSettingSchema,
             segments: {
                 type: Type.ARRAY,
                 description: "An array containing a single story segment.",
@@ -308,15 +342,17 @@ export const generateOutline = async (nodes: Node[], edges: Edge[], language: st
                 }
             }
         },
-        required: ["title", "segments"]
+        required: ["title", "segments", "synopsis", "main_characters", "work_info"]
     };
   } else {
-    storyStructureInstruction = `2.  **Segments and Chapters**: Divide the story into logical Segments, and then subdivide each Segment into multiple Chapters.
-3.  **Key Events**: For each chapter, you must provide a concise, bullet-point list of \`key_events\`. These should be actions, decisions, or revelations, not descriptive paragraphs.`;
+    storyStructureInstruction = `3.  **Segments and Chapters**: Divide the story into logical Segments, and then subdivide each Segment into multiple Chapters.
+4.  **Key Events**: For each chapter, you must provide a concise, bullet-point list of \`key_events\`. These should be actions, decisions, or revelations, not descriptive paragraphs.`;
     responseSchema = {
         type: Type.OBJECT,
         properties: {
             title: { type: Type.STRING, description: "The overall title of the story." },
+            synopsis: { type: Type.STRING, description: "A concise, one-paragraph summary of the entire story plot." },
+             ...characterAndSettingSchema,
             segments: {
                 type: Type.ARRAY,
                 description: "An array of story segments. A segment is a major part of the story and can contain multiple chapters.",
@@ -349,7 +385,7 @@ export const generateOutline = async (nodes: Node[], edges: Edge[], language: st
                 }
             }
         },
-        required: ["title", "segments"]
+        required: ["title", "segments", "synopsis", "main_characters", "work_info"]
     };
   }
 
@@ -357,13 +393,17 @@ export const generateOutline = async (nodes: Node[], edges: Edge[], language: st
 ${taskInstruction}
 
 **CRITICAL INSTRUCTIONS:**
-1.  **Structural Outline**: Your primary task is to create a well-formatted, structural outline, not a prose summary.
+1.  **Summarize Key Info**: At the top level of the JSON, you MUST include:
+    *   \`main_characters\`: Synthesize information from all CHARACTER nodes into a concise list of main characters and their key attributes.
+    *   \`work_info\`: Synthesize information from all SETTING nodes and the user's target word count.
+    *   \`synopsis\`: A concise, one-paragraph summary of the entire story plot.
+2.  **Structural Outline**: Your primary task is to create a well-formatted, structural outline, not a prose summary.
 ${storyStructureInstruction}
-4.  **JSON Output**: You MUST return your response as a valid JSON object. Do not include any text, notes, or markdown formatting outside of the JSON structure.
-5.  **JSON Structure**: The JSON must match the specified schema precisely.
-6.  **Word Count**: ${wordCountInstruction}
-7.  **Fusion**: The outline must organically integrate all plot nodes and settings into a complete story framework.
-8.  **Style Integration**: Consider all provided style instructions when formulating the key events.
+5.  **JSON Output**: You MUST return your response as a valid JSON object. Do not include any text, notes, or markdown formatting outside of the JSON structure.
+6.  **JSON Structure**: The JSON must match the specified schema precisely.
+7.  **Word Count**: ${wordCountInstruction}
+8.  **Fusion**: The outline must organically integrate all plot nodes and settings into a complete story framework.
+9.  **Style Integration**: Consider all provided style instructions when formulating the key events.
 
 Below are the story components provided by the user:
 ---

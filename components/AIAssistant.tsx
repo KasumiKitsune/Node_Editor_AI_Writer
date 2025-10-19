@@ -114,9 +114,14 @@ const AIAssistant: React.FC<AIAssistantProps> = ({ isOpen, onClose, onSubmit, is
     const handleSubmit = () => {
         if (inputValue.trim() && !isProcessing && !isAwaitingConfirmation) {
             onSubmit(inputValue);
-            setInputValue('');
         }
     };
+    
+    const handleAcceptAndClear = () => {
+        onAccept();
+        setInputValue('');
+    };
+
 
     if (!isOpen && !isAnimatingOut) {
         return null;
@@ -190,7 +195,7 @@ const AIAssistant: React.FC<AIAssistantProps> = ({ isOpen, onClose, onSubmit, is
                     <button onClick={onRevert} className="px-5 py-2 text-sm font-semibold text-slate-700 dark:text-slate-200 bg-slate-300/70 dark:bg-slate-700/70 rounded-full hover:bg-slate-400/70 dark:hover:bg-slate-600/70 transition-colors btn-material">
                         回退
                     </button>
-                    <button onClick={onAccept} className="px-5 py-2 text-sm font-semibold text-white bg-monet-dark rounded-full hover:bg-monet-dark-hover transition-colors btn-material">
+                    <button onClick={handleAcceptAndClear} className="px-5 py-2 text-sm font-semibold text-white bg-monet-dark rounded-full hover:bg-monet-dark-hover transition-colors btn-material">
                         接受
                     </button>
                 </div>

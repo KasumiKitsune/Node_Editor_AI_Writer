@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { NodeType } from '../types';
-import { PlusIcon, XIcon, PersonIcon, SettingIcon, EnvironmentIcon, StructureIcon, PlotIcon, StyleIcon, BookOpenIcon } from './icons';
+import { PlusIcon, XIcon } from './icons';
+import { nodeMeta } from '../constants';
 
 interface TrayNode {
     type: NodeType;
@@ -12,16 +13,6 @@ interface NodeTrayProps {
     onRemove: (index: number) => void;
     onInsert: () => void;
 }
-
-const nodeMeta: { [key in NodeType]?: { icon: React.FC<any>; color: string; label: string } } = {
-    [NodeType.PLOT]: { icon: PlotIcon, color: 'bg-blue-500', label: '情节' },
-    [NodeType.CHARACTER]: { icon: PersonIcon, color: 'bg-indigo-500', label: '人物' },
-    [NodeType.SETTING]: { icon: SettingIcon, color: 'bg-purple-500', label: '设定' },
-    [NodeType.STYLE]: { icon: StyleIcon, color: 'bg-pink-500', label: '风格' },
-    [NodeType.STRUCTURE]: { icon: StructureIcon, color: 'bg-amber-500', label: '结构' },
-    [NodeType.WORK]: { icon: BookOpenIcon, color: 'bg-emerald-500', label: '作品' },
-    [NodeType.ENVIRONMENT]: { icon: EnvironmentIcon, color: 'bg-green-500', label: '环境' },
-};
 
 const NodeTray: React.FC<NodeTrayProps> = ({ nodes, onRemove, onInsert }) => {
     const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
@@ -79,7 +70,9 @@ const NodeTray: React.FC<NodeTrayProps> = ({ nodes, onRemove, onInsert }) => {
             <div className="flex-grow overflow-x-auto overflow-y-hidden whitespace-nowrap h-16 flex items-center gap-2 pr-4 custom-tray-scroll">
                 {nodes.map((node, index) => {
                     const meta = nodeMeta[node.type];
-                    const Icon = meta?.icon || PlotIcon;
+                    const Icon = meta?.icon;
+                    if (!Icon) return null;
+
                     const title = node.data?.title || meta?.label || '新节点';
                     const isExpanded = expandedIndex === index;
 
