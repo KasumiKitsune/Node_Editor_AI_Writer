@@ -1,5 +1,4 @@
 // services/layout.ts
-import * as dagre from 'dagre';
 // FIX: Added React import for React.RefObject type.
 import React from 'react';
 import { Node, Edge, NodeType, StructureCategory, StructureNodeData } from '../types';
@@ -183,16 +182,6 @@ const calculateHierarchicalLayout = (
     edges: Edge[],
     dimensions: Map<string, NodeDimensions>
 ): NodePositions => {
-    const g = new dagre.graphlib.Graph();
-    g.setGraph({
-        rankdir: 'LR',
-        nodesep: 70,
-        ranksep: 120,
-        marginx: 50,
-        marginy: 50,
-    });
-    g.setDefaultEdgeLabel(() => ({}));
-
     const positions = new Map<string, { x: number; y: number }>();
     const flowNodeTypes: NodeType[] = [NodeType.PLOT, NodeType.STRUCTURE, NodeType.SETTING, NodeType.WORK];
     const satelliteNodeTypes: NodeType[] = [NodeType.STYLE, NodeType.CHARACTER, NodeType.ENVIRONMENT];
@@ -200,41 +189,91 @@ const calculateHierarchicalLayout = (
     const flowNodes = nodes.filter(n => flowNodeTypes.includes(n.type));
     const satelliteNodes = nodes.filter(n => satelliteNodeTypes.includes(n.type));
 
+    if (flowNodes.length === 0) {
+        placeHierarchicalSatellites(satelliteNodes, flowNodes, edges, positions, dimensions);
+        nodes.forEach(n => {
+            if (!positions.has(n.id)) positions.set(n.id, n.position);
+        });
+        return positions;
+    }
+
+    const nodeMap = new Map<string, { node: Node; parents: string[]; children: string[]; }>();
     flowNodes.forEach(node => {
-        const dim = dimensions.get(node.id) || { width: 320, height: 200 };
-        g.setNode(node.id, { width: dim.width, height: dim.height });
+        nodeMap.set(node.id, { node, parents: [], children: [] });
     });
 
     edges.forEach(edge => {
-        if (g.hasNode(edge.source) && g.hasNode(edge.target)) {
-            g.setEdge(edge.source, edge.target);
+        const sourceNode = nodes.find(n => n.id === edge.source);
+        const targetNode = nodes.find(n => n.id === edge.target);
+        if (sourceNode && targetNode && flowNodeTypes.includes(sourceNode.type) && flowNodeTypes.includes(targetNode.type)) {
+            nodeMap.get(edge.source)!.children.push(edge.target);
+            nodeMap.get(edge.target)!.parents.push(edge.source);
         }
     });
 
-    dagre.layout(g);
-
-    g.nodes().forEach(nodeId => {
-        const node = g.node(nodeId);
-        if (node) {
-            positions.set(nodeId, { x: node.x - node.width / 2, y: node.y - node.height / 2 });
+    const ranks = new Map<string, number>();
+    const queue: string[] = [];
+    nodeMap.forEach((data, id) => {
+        if (data.parents.length === 0) {
+            queue.push(id);
+            ranks.set(id, 0);
         }
     });
 
-    if (flowNodes.length === 0 && satelliteNodes.length > 0) {
-        let currentY = 50;
-        satelliteNodes.forEach(node => {
-            const dim = dimensions.get(node.id) || { width: 320, height: 200 };
-            positions.set(node.id, { x: 50, y: currentY });
-            currentY += dim.height + 20;
+    let head = 0;
+    while (head < queue.length) {
+        const uId = queue[head++];
+        const uRank = ranks.get(uId)!;
+        nodeMap.get(uId)?.children.forEach(vId => {
+            ranks.set(vId, Math.max(ranks.get(vId) || 0, uRank + 1));
+            // A simple cycle detection to prevent infinite loops.
+            if (!queue.slice(head).includes(vId)) {
+                 queue.push(vId);
+            }
         });
-    } else {
-        placeHierarchicalSatellites(satelliteNodes, flowNodes, edges, positions, dimensions);
     }
+    
+    flowNodes.forEach(node => {
+        if (!ranks.has(node.id)) {
+            ranks.set(node.id, 0);
+        }
+    });
+
+    const layers = new Map<number, string[]>();
+    ranks.forEach((rank, id) => {
+        if (!layers.has(rank)) layers.set(rank, []);
+        layers.get(rank)!.push(id);
+    });
+
+    const xSpacing = 120;
+    const ySpacing = 50;
+    const nodePadding = 50;
+    let currentX = nodePadding;
+
+    const sortedRanks = Array.from(layers.keys()).sort((a, b) => a - b);
+
+    for (const rank of sortedRanks) {
+        const layerNodeIds = layers.get(rank) || [];
+        if (layerNodeIds.length === 0) continue;
+
+        const layerDimensions = layerNodeIds.map(id => dimensions.get(id)!);
+        const maxNodeWidthInLayer = Math.max(...layerDimensions.map(dim => dim.width));
+        
+        let currentY = nodePadding;
+        layerNodeIds.forEach(id => {
+            const dim = dimensions.get(id)!;
+            const xPos = currentX + (maxNodeWidthInLayer - dim.width) / 2;
+            positions.set(id, { x: xPos, y: currentY });
+            currentY += dim.height + ySpacing;
+        });
+        currentX += maxNodeWidthInLayer + xSpacing;
+    }
+
+    placeHierarchicalSatellites(satelliteNodes, flowNodes, edges, positions, dimensions);
 
     nodes.forEach(node => {
         if (!positions.has(node.id)) {
-            const existingPos = nodes.find(n => n.id === node.id)?.position || { x: 50, y: 50 };
-            positions.set(node.id, existingPos);
+            positions.set(node.id, node.position);
         }
     });
 

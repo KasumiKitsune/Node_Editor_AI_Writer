@@ -77,8 +77,6 @@ const Minimap: React.FC<MinimapProps> = ({ nodes, edges, transform, editorRef, o
     const handleWindowDragStart = useCallback((e: React.MouseEvent, type: 'move' | 'resize') => {
         e.stopPropagation();
         dragRef.current = { type, startX: e.clientX, startY: e.clientY, startState: { ...minimapState } };
-        document.body.style.userSelect = 'none';
-        document.body.style.cursor = type === 'move' ? 'move' : 'se-resize';
     }, [minimapState]);
     
     const handleContentMouseDown = useCallback((e: React.MouseEvent) => {
@@ -88,9 +86,6 @@ const Minimap: React.FC<MinimapProps> = ({ nodes, edges, transform, editorRef, o
             const clickY = e.clientY - contentRect.top;
             const isInsideViewport = (clickX >= viewport.x && clickX <= viewport.x + viewport.width && clickY >= viewport.y && clickY <= viewport.y + viewport.height);
             
-            document.body.style.userSelect = 'none';
-            document.body.style.cursor = 'grabbing';
-
             if (isInsideViewport) {
                 e.stopPropagation();
                 viewportPanRef.current = { startX: e.clientX, startY: e.clientY, startTransform: { ...transform } };
@@ -100,41 +95,35 @@ const Minimap: React.FC<MinimapProps> = ({ nodes, edges, transform, editorRef, o
         }
     }, [transform, viewport, pan]);
     
-    const handleWheel = useCallback((e: React.WheelEvent) => {
+    const handleZoom = useCallback((e: React.WheelEvent) => {
         e.preventDefault();
         e.stopPropagation();
         if (!contentRef.current) return;
 
-        if (e.ctrlKey) { // Pinch-to-zoom gesture
-            const rect = contentRef.current.getBoundingClientRect();
-            const mouseX = e.clientX - rect.left;
-            const mouseY = e.clientY - rect.top;
+        const rect = contentRef.current.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
 
-            const oldZoom = zoom;
-            const newZoom = Math.max(0.1, Math.min(oldZoom - e.deltaY * 0.005, 5)); // Increased sensitivity
+        const oldZoom = zoom;
+        const newZoom = Math.max(0.1, Math.min(oldZoom - e.deltaY * 0.001, 5));
 
-            const { width, height } = bounds;
-            const mapWidth = minimapState.width - PADDING * 2;
-            const mapHeight = minimapState.height - 32 - PADDING * 2;
-            const baseScale = Math.min(mapWidth / width, mapHeight / height);
+        const { width, height } = bounds;
+        const mapWidth = minimapState.width - PADDING * 2;
+        const mapHeight = minimapState.height - 32 - PADDING * 2;
+        const baseScale = Math.min(mapWidth / width, mapHeight / height);
+        
+        const oldMapScale = isFinite(baseScale) ? baseScale * oldZoom : oldZoom;
+        const newMapScale = isFinite(baseScale) ? baseScale * newZoom : newZoom;
 
-            const oldMapScale = isFinite(baseScale) ? baseScale * oldZoom : oldZoom;
-            const newMapScale = isFinite(baseScale) ? baseScale * newZoom : newZoom;
+        const worldX = (mouseX - PADDING - pan.x) / oldMapScale;
+        const worldY = (mouseY - PADDING - pan.y) / oldMapScale;
 
-            const worldX = (mouseX - PADDING - pan.x) / oldMapScale;
-            const worldY = (mouseY - PADDING - pan.y) / oldMapScale;
+        const newPanX = mouseX - PADDING - worldX * newMapScale;
+        const newPanY = mouseY - PADDING - worldY * newMapScale;
 
-            const newPanX = mouseX - PADDING - worldX * newMapScale;
-            const newPanY = mouseY - PADDING - worldY * newMapScale;
+        setZoom(newZoom);
+        setPan({ x: newPanX, y: newPanY });
 
-            setZoom(newZoom);
-            setPan({ x: newPanX, y: newPanY });
-        } else { // Two-finger pan/scroll
-            setPan(prevPan => ({
-                x: prevPan.x - e.deltaX,
-                y: prevPan.y - e.deltaY,
-            }));
-        }
     }, [zoom, pan, bounds, minimapState.width, minimapState.height]);
 
     useEffect(() => {
@@ -177,8 +166,6 @@ const Minimap: React.FC<MinimapProps> = ({ nodes, edges, transform, editorRef, o
             dragRef.current = null;
             viewportPanRef.current = null;
             minimapPanRef.current = null;
-            document.body.style.userSelect = '';
-            document.body.style.cursor = '';
         };
 
         window.addEventListener('mousemove', handleMouseMove);
@@ -213,7 +200,7 @@ const Minimap: React.FC<MinimapProps> = ({ nodes, edges, transform, editorRef, o
             <div 
                 ref={contentRef}
                 className="relative bg-slate-100 dark:bg-slate-900 rounded-lg overflow-hidden mt-1 flex-grow cursor-grab"
-                onWheel={handleWheel}
+                onWheel={handleZoom}
                 onMouseDown={handleContentMouseDown}
             >
                 <div 
