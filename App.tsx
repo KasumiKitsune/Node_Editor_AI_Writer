@@ -179,8 +179,8 @@ const App: React.FC = () => {
   const canRedoOutline = currentOutlineIndex < outlineHistory.length - 1;
   const currentStory = storyHistory[currentStoryIndex] || '';
   const previousStory = storyHistory[currentStoryIndex - 1] || null;
-  const canUndoStory = currentOutlineIndex > 0;
-  const canRedoStory = currentOutlineIndex < storyHistory.length - 1;
+  const canUndoStory = currentStoryIndex > 0;
+  const canRedoStory = currentStoryIndex < storyHistory.length - 1;
 
   // Helper to get language from setting nodes
   const getLanguageFromNodes = (nodes: Node[]): string => {
